@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 /** Keeps an element mounted while its exit animation plays. */
 export function usePresence(open: boolean, exitMs = 240) {
@@ -65,6 +66,22 @@ export function useToast(duration = 2400) {
   return [toast, show] as const
 }
 
+/**
+ * Locks page scrolling while any overlay is mounted. Counted, so overlays that
+ * hand off to each other (one closing while the next opens) never unlock early.
+ */
+let scrollLocks = 0
+export function useScrollLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return
+    const root = document.documentElement
+    if (scrollLocks++ === 0) root.style.overflow = 'hidden'
+    return () => {
+      if (--scrollLocks === 0) root.style.overflow = ''
+    }
+  }, [active])
+}
+
 export function Toast({ message }: { message: string | null }) {
   const [last, setLast] = useState(message)
   const { mounted, closing } = usePresence(!!message, 200)
@@ -72,7 +89,8 @@ export function Toast({ message }: { message: string | null }) {
     if (message) setLast(message)
   }, [message])
   if (!mounted || !last) return null
-  return (
+  // Portalled so animated (transformed) ancestors cannot re-anchor `fixed`.
+  return createPortal(
     <div
       role="status"
       className={`fixed bottom-[24px] left-1/2 z-50 max-w-[calc(100vw-32px)] rounded-[10px] bg-[#054131] px-[16px] py-[10px] text-center font-['Outfit:Regular'] text-[14px] text-white shadow-lg ${
@@ -81,7 +99,8 @@ export function Toast({ message }: { message: string | null }) {
       style={{ transform: 'translateX(-50%)' }}
     >
       {last}
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -108,10 +127,14 @@ export function Sheet({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  useScrollLock(mounted)
+
   if (!mounted) return null
-  return (
+  // Rendered into <body>: screens animate with `transform`, which would otherwise
+  // turn `fixed` into "fixed to the scrolling page" and push the sheet off-screen.
+  return createPortal(
     <div
-      className={`fixed inset-0 z-40 flex items-end justify-center bg-[#054131]/30 ${
+      className={`fixed inset-0 z-40 flex items-end justify-center overscroll-none bg-[#054131]/30 ${
         closing ? '[animation:fade-out_260ms_ease-in_forwards]' : '[animation:fade-in_220ms_ease-out]'
       }`}
       onClick={onClose}
@@ -121,7 +144,7 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={labelledBy}
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-[560px] rounded-t-[24px] bg-white ${className} ${
+        className={`max-h-[calc(100dvh-24px)] w-full max-w-[560px] overflow-y-auto overscroll-contain rounded-t-[24px] bg-white ${className} ${
           closing
             ? '[animation:sheet-down_260ms_cubic-bezier(0.4,0,1,1)_forwards]'
             : '[animation:sheet-up_360ms_cubic-bezier(0.2,0.8,0.2,1)]'
@@ -129,7 +152,8 @@ export function Sheet({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -70,7 +70,7 @@ export function JenisSheet({
   onSelect: (j: Jenis) => void
 }) {
   return (
-    <Sheet open={open} onClose={onClose} labelledBy="jenis-title" className="flex flex-col items-center gap-[16px] overflow-clip px-[16px] pt-[8px] pb-[40px]">
+    <Sheet open={open} onClose={onClose} labelledBy="jenis-title" className="flex flex-col items-center gap-[16px] px-[16px] pt-[8px] pb-[40px]">
         <div className="h-[4px] w-[64px] shrink-0 rounded-[12px] bg-[#dedede]" />
         <div className="flex w-full flex-col gap-[24px]">
           <div className="flex w-full items-center justify-center gap-[10px]">
