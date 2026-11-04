@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { LinkButton, RoundIconButton } from '@/components/ui'
+import { HOME_IMAGES, INITIAL_BILLS } from '@/services/bill.service'
 import type { Session } from '@/types'
 
 const a = (f: string) => `/assets/${f}`
@@ -15,12 +16,17 @@ export const authIcons = {
 
 /** Images the first auth screen needs, preloaded while the splash plays. */
 export const AUTH_ASSETS = [
-  authIcons.heroBill,
-  authIcons.heroMasuk,
-  authIcons.heroTagihan,
   authIcons.support,
   authIcons.eyeClosed,
   authIcons.back,
+  HOME_IMAGES.cashOut,
+  HOME_IMAGES.bell,
+  HOME_IMAGES.chefHat,
+  HOME_IMAGES.dashedLine,
+  HOME_IMAGES.verified,
+  HOME_IMAGES.bellSmall,
+  ...HOME_IMAGES.stack,
+  ...INITIAL_BILLS[0].participants.map((p) => p.avatarUrl),
 ]
 
 export const OTP_LENGTH = 6
@@ -87,4 +93,3 @@ export function SwitchPrompt({ prompt, action, onClick }: { prompt: string; acti
     </div>
   )
 }
-
