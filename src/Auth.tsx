@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
-import { LogoLoader, Spinner, Toast, screenClass, useSwitch, useToast } from './ui'
+import { Img, LogoLoader, Spinner, Toast, screenClass, useSwitch, useToast } from './ui'
 
 const a = (f: string) => `/assets/${f}`
 
@@ -22,7 +22,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 /* ---------------- Opening splash ---------------- */
 
 /** Images the first auth screen needs, preloaded while the splash plays. */
-export const AUTH_ASSETS = [icons.heroBill, icons.heroMasuk, icons.heroTagihan, icons.support, icons.eyeClosed]
+export const AUTH_ASSETS = [icons.heroBill, icons.heroMasuk, icons.heroTagihan, icons.support, icons.eyeClosed, icons.back]
 
 export function Splash({ ready, onDone }: { ready: boolean; onDone: () => void }) {
   return (
@@ -43,7 +43,7 @@ function RoundIcon({ label, src, onClick }: { label: string; src: string; onClic
       className="flex shrink-0 items-center rounded-[999px] bg-[#f8f8ec] p-[8px] transition duration-200 hover:bg-[#eef0d6] active:scale-95"
     >
       <span className="relative block size-[24px] shrink-0">
-        <img alt="" className="absolute inset-0 block size-full max-w-none" src={src} />
+        <Img src={src} skeleton="rounded-full" />
       </span>
     </button>
   )
@@ -132,7 +132,7 @@ function Field({ label, error, password, ...input }: FieldProps) {
             className="relative size-[20px] shrink-0 rounded-[4px] transition active:scale-90"
           >
             <span key={String(visible)} className="absolute inset-0 [animation:pop-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]">
-              {visible ? <EyeOpen /> : <img alt="" className="absolute inset-0 block size-full max-w-none" src={icons.eyeClosed} />}
+              {visible ? <EyeOpen /> : <Img src={icons.eyeClosed} skeleton="rounded-full" />}
             </span>
           </button>
         )}
@@ -193,21 +193,21 @@ function HeroCollage() {
       <div className={`${card} top-[-21px] left-[-81px] h-[181.492px] w-[337.085px] [animation:card-in_700ms_cubic-bezier(0.2,0.8,0.2,1)_120ms_both]`}>
         <div className="flex-none rotate-[-4.95deg]">
           <div className="relative h-[154px] w-[325px]">
-            <img alt="" className="pointer-events-none absolute inset-0 size-full max-w-none object-cover" src={icons.heroBill} />
+            <Img src={icons.heroBill} className="pointer-events-none object-cover" skeleton="rounded-[8px]" />
           </div>
         </div>
       </div>
       <div className={`${card} top-[-46.02px] left-[130.7px] h-[212.577px] w-[417.209px] [animation:card-in_700ms_cubic-bezier(0.2,0.8,0.2,1)_240ms_both]`}>
         <div className="flex-none rotate-[11.18deg]">
           <div className="relative h-[138px] w-[398px] shadow-[0px_6px_24px_0px_rgba(0,0,0,0.12)]">
-            <img alt="" className="pointer-events-none absolute inset-0 size-full max-w-none object-cover" src={icons.heroMasuk} />
+            <Img src={icons.heroMasuk} className="pointer-events-none object-cover" skeleton="rounded-[8px]" />
           </div>
         </div>
       </div>
       <div className={`${card} top-[100px] left-[-11px] h-[159.124px] w-[404.821px] [animation:card-in_700ms_cubic-bezier(0.2,0.8,0.2,1)_360ms_both]`}>
         <div className="flex-none rotate-[3.07deg]">
           <div className="relative h-[138px] w-[398px]">
-            <img alt="" className="pointer-events-none absolute inset-0 size-full max-w-none object-cover" src={icons.heroTagihan} />
+            <Img src={icons.heroTagihan} className="pointer-events-none object-cover" skeleton="rounded-[8px]" />
           </div>
         </div>
       </div>

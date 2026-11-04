@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Img, LogoLoader, Sheet, preloadImage } from './ui'
 
 const a = (f: string) => `/assets/${f}`
 
@@ -7,7 +8,6 @@ const icons = {
   back: a('5ceb4.svg'),
   flashlight: a('72e1b.svg'),
   gallery: a('140e3.svg'),
-  logo: a('3d807.svg'),
 }
 
 export type InputMode = 'manual' | 'scan'
@@ -20,10 +20,13 @@ export const jenisOptions = [
 
 export type Jenis = (typeof jenisOptions)[number]
 
+/** Every image the scan flow can show, for warming the cache ahead of time. */
+export const SCAN_ASSETS = [...Object.values(icons), ...jenisOptions.map((j) => j.icon)]
+
 function Glyph({ src, size = 24 }: { src: string; size?: number }) {
   return (
     <span className="relative block shrink-0" style={{ width: size, height: size }}>
-      <img alt="" className="absolute inset-0 block size-full max-w-none" src={src} />
+      <Img src={src} skeleton="rounded-[5px]" />
     </span>
   )
 }
@@ -56,29 +59,18 @@ function RoundButton({
 /* ---------------- BOTTOM_SHEET_JENIS ---------------- */
 
 export function JenisSheet({
+  open,
   mode,
   onClose,
   onSelect,
 }: {
+  open: boolean
   mode: InputMode
   onClose: () => void
   onSelect: (j: Jenis) => void
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#054131]/30 [animation:fade-in_180ms_ease-out]" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="jenis-title"
-        onClick={(e) => e.stopPropagation()}
-        className="flex w-full max-w-[560px] flex-col items-center gap-[16px] overflow-clip rounded-t-[24px] bg-white px-[16px] pt-[8px] pb-[40px] [animation:sheet-up_260ms_cubic-bezier(0.2,0.8,0.2,1)]"
-      >
+    <Sheet open={open} onClose={onClose} labelledBy="jenis-title" className="flex flex-col items-center gap-[16px] overflow-clip px-[16px] pt-[8px] pb-[40px]">
         <div className="h-[4px] w-[64px] shrink-0 rounded-[12px] bg-[#dedede]" />
         <div className="flex w-full flex-col gap-[24px]">
           <div className="flex w-full items-center justify-center gap-[10px]">
@@ -96,12 +88,12 @@ export function JenisSheet({
               <Glyph src={icons.close} />
             </button>
           </div>
-          <div className="flex w-full flex-col gap-[12px]">
+          <div className="stagger flex w-full flex-col gap-[12px]">
             {jenisOptions.map((j) => (
               <button
                 key={j.id}
                 onClick={() => onSelect(j)}
-                className="flex w-full items-center gap-[10px] rounded-[14px] border border-[#ececec] bg-[#fefef8] p-[12px] text-left transition hover:border-[#a6bb18] hover:bg-[#f8f8ec] active:scale-[0.99]"
+                className="flex w-full items-center gap-[10px] rounded-[14px] border border-[#ececec] bg-[#fefef8] p-[12px] text-left transition duration-200 hover:border-[#a6bb18] hover:bg-[#f8f8ec] active:scale-[0.99]"
               >
                 <Glyph src={j.icon} />
                 <span className="flex min-w-px flex-1 flex-col gap-[4px] leading-[normal]">
@@ -112,8 +104,7 @@ export function JenisSheet({
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   )
 }
 
@@ -186,7 +177,7 @@ export function ScanScreen({
   }
 
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-white text-[#054131] [animation:fade-in_200ms_ease-out]">
+    <div className="flex min-h-dvh w-full flex-col bg-white text-[#054131]">
       <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[16px] pt-[24px] pb-[24px] md:pt-[32px]">
         <div className="flex w-full items-center justify-between">
           <RoundButton label="Kembali" icon={icons.back} onClick={onBack} />
@@ -262,27 +253,31 @@ export function ScanScreen({
 
 /* ---------------- SCAN STRUK (loading) ---------------- */
 
-export function LoadingScreen({ onBack, onDone, duration = 2800 }: { onBack: () => void; onDone: () => void; duration?: number }) {
+const MIN_PROCESSING_MS = 1800
+
+export function LoadingScreen({ image, onBack, onDone }: { image: string | null; onBack: () => void; onDone: () => void }) {
+  const [ready, setReady] = useState(false)
+
+  // Ready once the captured photo is decoded and processing has had time to run.
   useEffect(() => {
-    const t = setTimeout(onDone, duration)
-    return () => clearTimeout(t)
-  }, [onDone, duration])
+    let alive = true
+    Promise.all([image ? preloadImage(image) : null, new Promise((r) => setTimeout(r, MIN_PROCESSING_MS))]).then(
+      () => alive && setReady(true),
+    )
+    return () => {
+      alive = false
+    }
+  }, [image])
 
   return (
-    <div className="relative flex min-h-dvh w-full flex-col bg-white [animation:fade-in_200ms_ease-out]" aria-busy="true">
+    <div className="relative flex min-h-dvh w-full flex-col bg-white" aria-busy={!ready}>
       <div className="mx-auto w-full max-w-[560px] px-[16px] pt-[24px] md:pt-[32px]">
         <RoundButton label="Batalkan" icon={icons.back} onClick={onBack} />
       </div>
       <div role="status" className="absolute top-[calc(50%-39.5px)] left-1/2 flex w-[152px] -translate-1/2 flex-col items-center gap-[6px]">
-        <div className="relative h-[39.48px] w-[88.202px] [animation:logo-float_1.6s_ease-in-out_infinite]">
-          <img alt="Kloop" className="absolute inset-0 block size-full max-w-none [animation:logo-write_1.6s_cubic-bezier(0.6,0,0.3,1)_infinite]" src={icons.logo} />
-        </div>
-        <p className="w-full text-center font-['Outfit:Regular'] text-[16px] leading-[normal] font-normal tracking-[-0.2px] text-[#8e8e8e]">
-          tunggu sebentar ya
-          <span className="inline-block [animation:dot_1.2s_infinite]">.</span>
-          <span className="inline-block [animation:dot_1.2s_0.15s_infinite]">.</span>
-          <span className="inline-block [animation:dot_1.2s_0.3s_infinite]">.</span>
-          <span className="inline-block [animation:dot_1.2s_0.45s_infinite]">.</span>
+        <LogoLoader ready={ready} onDone={onDone} width={88} />
+        <p className="w-full text-center font-['Outfit:Regular'] text-[16px] leading-[normal] font-normal tracking-[-0.2px] whitespace-nowrap text-[#8e8e8e] [animation:fade-in_500ms_ease-out_300ms_both]">
+          tunggu sebentar ya....
         </p>
       </div>
     </div>

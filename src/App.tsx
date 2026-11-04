@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { JenisSheet, LoadingScreen, ScanScreen, jenisOptions, type InputMode, type Jenis } from './ScanFlow'
+import { AUTH_ASSETS, AuthFlow, Splash, type Session } from './Auth'
+import { JenisSheet, LoadingScreen, SCAN_ASSETS, ScanScreen, jenisOptions, type InputMode, type Jenis } from './ScanFlow'
+import { Img, Sheet, Toast, preloadImage, preloadWhenIdle, screenClass, usePresence, useSwitch, useToast } from './ui'
 
 const a = (f: string) => `/assets/${f}`
 
@@ -98,6 +100,18 @@ const talangan = {
   masuk: { count: 4, amount: 345000, note: 'Dari 4 teman di 2 sesi bill' },
   tagihan: { count: 3, amount: 65000, note: '1 tagihan belum kamu bayar' },
 }
+
+/** Every image the home screen can show. */
+const HOME_ASSETS = [
+  ...Object.values(img).flat(),
+  ...Object.values(circleAvatars),
+  ...initialBills.flatMap((b) => b.participants.map((p) => p.avatar)),
+]
+
+/** Faces that are only requested once text using them renders; loading them up front avoids a late swap. */
+const FONT_FACES = ["400 16px 'Outfit:Regular'", "500 16px 'Outfit:Medium'", "600 16px 'Outfit:SemiBold'", "16px 'Courgette:Regular'"]
+const loadFonts = () =>
+  document.fonts ? Promise.all(FONT_FACES.map((f) => document.fonts.load(f).catch(() => undefined))) : Promise.resolve()
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -211,14 +225,12 @@ function TalanganCard({
               {isMasuk && (
                 <div className="flex items-center">
                   {img.stack.map((s, i, arr) => (
-                    <img
+                    <span
                       key={s}
-                      alt=""
-                      src={s}
-                      width={24}
-                      height={24}
-                      className={`block size-[24px] max-w-none shrink-0 ${i < arr.length - 1 ? 'mr-[-12px]' : ''}`}
-                    />
+                      className={`relative block size-[24px] shrink-0 ${i < arr.length - 1 ? 'mr-[-12px]' : ''}`}
+                    >
+                      <Img src={s} skeleton="rounded-full ring-2 ring-white" />
+                    </span>
                   ))}
                 </div>
               )}
@@ -257,15 +269,94 @@ function TalanganCard({
   )
 }
 
-function Icon({ src, size }: { src: string; size: number }) {
+function Icon({ src, size, round }: { src: string; size: number; round?: boolean }) {
   return (
     <span className="relative block shrink-0" style={{ width: size, height: size }}>
-      <img alt="" className="absolute inset-0 block size-full max-w-none" src={src} />
+      <Img src={src} skeleton={round ? 'rounded-full' : 'rounded-[5px]'} />
     </span>
   )
 }
 
+const SESSION_KEY = 'kloop.session'
+
+function readSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    return raw ? (JSON.parse(raw) as Session) : null
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
+  const [session, setSession] = useState<Session | null>(readSession)
+  const [splashDone, setSplashDone] = useState(false)
+  const [contentReady, setContentReady] = useState(false)
+  const [toast, notify] = useToast()
+
+  // The splash stays up until fonts and the first screen's images are ready.
+  useEffect(() => {
+    let alive = true
+    const assets = session ? [img.profile, img.illustration, ...img.stack] : AUTH_ASSETS
+    Promise.race([
+      Promise.all([loadFonts(), ...assets.map(preloadImage)]),
+      new Promise((r) => setTimeout(r, 6000)),
+    ]).then(() => {
+      if (!alive) return
+      setContentReady(true)
+      // Warm the screens that come next so they open without placeholders.
+      preloadWhenIdle([...HOME_ASSETS, ...SCAN_ASSETS, ...AUTH_ASSETS])
+    })
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const stage = !splashDone ? 'splash' : session ? 'app' : 'auth'
+  const { shown, leaving } = useSwitch(stage, 320)
+  const finishSplash = useCallback(() => setSplashDone(true), [])
+
+  const signIn = (s: Session, message: string) => {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(s))
+    } catch {
+      /* storage unavailable: session lasts for this tab only */
+    }
+    setSession(s)
+    setTimeout(() => notify(message), 500)
+  }
+
+  const signOut = () => {
+    try {
+      localStorage.removeItem(SESSION_KEY)
+    } catch {
+      /* ignore */
+    }
+    setSession(null)
+  }
+
+  return (
+    <>
+      <div
+        key={shown}
+        className={
+          leaving
+            ? '[animation:stage-out_320ms_cubic-bezier(0.4,0,1,1)_forwards]'
+            : '[animation:stage-in_520ms_cubic-bezier(0.2,0.8,0.2,1)_both]'
+        }
+      >
+        {shown === 'splash' && <Splash ready={contentReady} onDone={finishSplash} />}
+        {shown === 'auth' && <AuthFlow onAuthed={signIn} />}
+        {shown === 'app' && session && <Home session={session} onLogout={signOut} notify={notify} />}
+      </div>
+      <Toast message={toast} />
+    </>
+  )
+}
+
+function Home({ session, onLogout, notify }: { session: Session; onLogout: () => void; notify: (m: string) => void }) {
+  const setToast = notify
   const [tab, setTab] = useState<'masuk' | 'tagihan'>('masuk')
   const [bills, setBills] = useState(initialBills)
   const [showAll, setShowAll] = useState(false)
@@ -273,18 +364,19 @@ export default function App() {
   const [circle, setCircle] = useState(Object.keys(circleAvatars) as (keyof typeof circleAvatars)[])
   const [managing, setManaging] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
   const billsRef = useRef<HTMLElement>(null)
-  const [jenisMode, setJenisMode] = useState<InputMode | null>(null)
+  const [jenisOpen, setJenisOpen] = useState(false)
+  const [jenisMode, setJenisMode] = useState<InputMode>('scan')
   const [jenis, setJenis] = useState<Jenis>(jenisOptions[0])
   const [screen, setScreen] = useState<'home' | 'scan' | 'loading'>('home')
+  const [profileOpen, setProfileOpen] = useState(false)
   const scanImage = useRef<string | null>(null)
+  const { shown: shownScreen, leaving } = useSwitch(screen)
 
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 2400)
-    return () => clearTimeout(t)
-  }, [toast])
+  const openJenis = (mode: InputMode) => {
+    setJenisMode(mode)
+    setJenisOpen(true)
+  }
 
   const [tagihanPaid, setTagihanPaid] = useState(false)
 
@@ -326,10 +418,9 @@ export default function App() {
 
   const selectJenis = (j: Jenis) => {
     setJenis(j)
-    const mode = jenisMode
-    setJenisMode(null)
-    if (mode === 'scan') setScreen('scan')
-    else setSheetOpen(true)
+    setJenisOpen(false)
+    // let the sheet finish sliding away before the next view appears
+    setTimeout(() => (jenisMode === 'scan' ? setScreen('scan') : setSheetOpen(true)), 240)
   }
 
   const finishScan = useCallback(() => {
@@ -351,24 +442,14 @@ export default function App() {
     setToast('Struk berhasil dipindai')
   }, [jenis, circle])
 
-  const toastEl = toast && (
-    <div
-      role="status"
-      className="fixed bottom-[24px] left-1/2 z-50 rounded-[10px] bg-[#054131] px-[16px] py-[10px] font-['Outfit:Regular'] text-[14px] whitespace-nowrap text-white shadow-lg [animation:toast-in_180ms_ease-out]"
-      style={{ transform: 'translateX(-50%)' }}
-    >
-      {toast}
-    </div>
-  )
-
-  if (screen === 'scan')
+  if (shownScreen === 'scan')
     return (
-      <>
+      <div key="scan" className={screenClass(leaving)}>
         <ScanScreen
           onBack={() => setScreen('home')}
           onManual={() => {
             setScreen('home')
-            setSheetOpen(true)
+            setTimeout(() => setSheetOpen(true), 360)
           }}
           onCaptured={(src) => {
             scanImage.current = src
@@ -376,22 +457,30 @@ export default function App() {
           }}
           notify={setToast}
         />
-        {toastEl}
-      </>
+      </div>
     )
 
-  if (screen === 'loading') return <LoadingScreen onBack={() => setScreen('scan')} onDone={finishScan} />
+  if (shownScreen === 'loading')
+    return (
+      <div key="loading" className={screenClass(leaving)}>
+        <LoadingScreen image={scanImage.current} onBack={() => setScreen('scan')} onDone={finishScan} />
+      </div>
+    )
 
   const [featured, ...others] = bills
 
   return (
-    <div className="min-h-dvh w-full bg-white text-[#054131]">
+    <div key="home" className={`min-h-dvh w-full bg-white text-[#054131] ${screenClass(leaving)}`}>
       <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-[24px] pb-[48px]">
         {/* Header */}
-        <header className="flex items-center justify-between px-[16px] pt-[24px] pb-[14px] md:pt-[32px]">
-          <button aria-label="Profil" className="relative size-[40px] shrink-0 rounded-full transition hover:opacity-80">
-            <img alt="" className="absolute inset-0 block size-full max-w-none" src={img.profile} />
-          </button>
+        <header className="relative z-30 flex items-center justify-between px-[16px] pt-[24px] pb-[14px] md:pt-[32px] [animation:fade-down_420ms_cubic-bezier(0.2,0.8,0.2,1)_both]">
+          <ProfileMenu
+            open={profileOpen}
+            onToggle={() => setProfileOpen((o) => !o)}
+            onClose={() => setProfileOpen(false)}
+            session={session}
+            onLogout={onLogout}
+          />
           <p className="font-['Courgette:Regular'] text-[26px] leading-[normal] tracking-[-0.3px] whitespace-nowrap text-[#054131]">
             Kloop
           </p>
@@ -405,7 +494,7 @@ export default function App() {
         </header>
 
         <main className="grid grid-cols-1 gap-[40px] md:grid-cols-2 md:gap-x-[32px] md:px-[16px]">
-          <div className="flex flex-col gap-[40px]">
+          <div className="stagger flex flex-col gap-[40px]">
             {/* Status Talangan */}
             <section className="flex flex-col gap-[12px] px-[16px] md:px-0">
               <h2 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px]">
@@ -430,7 +519,7 @@ export default function App() {
             {/* New expense CTA */}
             <section className="flex items-center gap-[24px] px-[16px] md:px-0">
               <div className="relative h-[110px] w-[96px] shrink-0">
-                <img alt="" className="absolute inset-0 block size-full max-w-none" src={img.illustration} />
+                <Img src={img.illustration} skeleton="rounded-[14px]" />
               </div>
               <div className="flex min-w-px flex-1 flex-col gap-[18px]">
                 <div className="flex flex-col gap-[8px]">
@@ -443,7 +532,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-[10px]">
                   <button
-                    onClick={() => setJenisMode('manual')}
+                    onClick={() => openJenis('manual')}
                     className="flex min-w-px flex-1 items-center gap-[6px] rounded-[8px] bg-white px-[12px] py-[8px] transition hover:bg-[#f8f8ec]"
                   >
                     <Icon src={img.docAdd} size={18} />
@@ -452,7 +541,7 @@ export default function App() {
                     </span>
                   </button>
                   <button
-                    onClick={() => setJenisMode('scan')}
+                    onClick={() => openJenis('scan')}
                     className="flex min-w-px flex-1 items-center justify-center gap-[6px] rounded-[8px] bg-[#a6bb18] px-[12px] py-[8px] transition hover:bg-[#97ab12] active:scale-[0.98]"
                   >
                     <Icon src={img.scan} size={18} />
@@ -465,7 +554,7 @@ export default function App() {
             </section>
           </div>
 
-          <div className="flex flex-col gap-[40px]">
+          <div className="stagger flex flex-col gap-[40px]">
             {/* Tagihan Berjalan */}
             <section ref={billsRef} className="flex scroll-mt-4 flex-col gap-[14px] px-[16px] md:px-0">
               <div className="flex items-center justify-between font-['Outfit:Medium'] leading-[normal] font-medium tracking-[-0.2px] whitespace-nowrap">
@@ -518,7 +607,7 @@ export default function App() {
               <div className="grid grid-cols-3 gap-[14px]">
                 {circle.map((name) => (
                   <div key={name} className="flex items-center gap-[6px]">
-                    <Icon src={circleAvatars[name]} size={24} />
+                    <Icon src={circleAvatars[name]} size={24} round />
                     <p className="font-['Outfit:Regular'] text-[14px] leading-[normal] font-normal tracking-[-0.2px] whitespace-nowrap">
                       {name}
                     </p>
@@ -544,15 +633,11 @@ export default function App() {
         </main>
       </div>
 
-      {sheetOpen && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#054131]/30 md:items-center" onClick={() => setSheetOpen(false)}>
-          <form
-            onSubmit={addManualBill}
-            onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[430px] flex-col gap-[14px] rounded-t-[20px] bg-white p-[20px] pb-[28px] md:rounded-[16px] [animation:sheet-in_200ms_ease-out]"
-          >
-            <div className="flex items-center gap-[6px]">
-              <p className="font-['Outfit:Medium'] text-[18px] font-medium tracking-[-0.2px]">Input manual</p>
+      <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} labelledBy="manual-title">
+          <form onSubmit={addManualBill} className="flex flex-col gap-[14px] p-[20px] pt-[8px] pb-[32px]">
+            <div className="mx-auto h-[4px] w-[64px] shrink-0 rounded-[12px] bg-[#dedede]" />
+            <div className="flex items-center gap-[6px] pt-[8px]">
+              <p id="manual-title" className="font-['Outfit:Medium'] text-[18px] font-medium tracking-[-0.2px]">Input manual</p>
               <span className="rounded-[6px] border border-[#ececec] bg-[#f9f9f9] px-[8px] pb-px font-['Outfit:Regular'] text-[14px] leading-[18px] text-[#054131]">
                 {jenis.title}
               </span>
@@ -564,7 +649,7 @@ export default function App() {
                 required
                 autoFocus
                 placeholder="cth. Kopi Nako Tembalang"
-                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
               />
             </label>
             <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
@@ -574,31 +659,28 @@ export default function App() {
                 required
                 inputMode="numeric"
                 placeholder="185000"
-                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
               />
             </label>
             <div className="flex gap-[10px] pt-[4px]">
               <button
                 type="button"
                 onClick={() => setSheetOpen(false)}
-                className="flex-1 rounded-[8px] bg-[#f2f3e6] py-[10px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18]"
+                className="flex-1 rounded-[8px] bg-[#f2f3e6] py-[10px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] transition duration-200 hover:bg-[#e8ead2] active:scale-[0.98]"
               >
                 Batal
               </button>
               <button
                 type="submit"
-                className="flex-1 rounded-[8px] bg-[#a6bb18] py-[10px] font-['Outfit:Medium'] text-[14px] font-medium text-white hover:bg-[#97ab12]"
+                className="flex-1 rounded-[8px] bg-[#a6bb18] py-[10px] font-['Outfit:Medium'] text-[14px] font-medium text-white transition duration-200 hover:bg-[#97ab12] active:scale-[0.98]"
               >
                 Simpan
               </button>
             </div>
           </form>
-        </div>
-      )}
+      </Sheet>
 
-      {jenisMode && <JenisSheet mode={jenisMode} onClose={() => setJenisMode(null)} onSelect={selectJenis} />}
-
-      {toastEl}
+      <JenisSheet open={jenisOpen} mode={jenisMode} onClose={() => setJenisOpen(false)} onSelect={selectJenis} />
     </div>
   )
 }
@@ -616,7 +698,7 @@ function BillCard({
 }) {
   const paidCount = bill.participants.filter((p) => p.paid).length
   return (
-    <div className="flex w-full flex-col gap-[12px] rounded-[10px] border border-[#ececec] bg-white p-[12px]">
+    <div className="flex w-full flex-col gap-[12px] rounded-[10px] border border-[#ececec] bg-white p-[12px] [animation:fade-up_360ms_cubic-bezier(0.2,0.8,0.2,1)_both]">
       <div className="flex items-center justify-between">
         <div className="flex items-center justify-center gap-[4px]">
           <Icon src={img.chefHat} size={18} />
@@ -653,7 +735,7 @@ function BillCard({
                   title={p.paid ? 'Tandai belum lunas' : 'Tandai lunas'}
                   className="flex items-center gap-[6px] rounded-[4px] hover:opacity-80"
                 >
-                  <Icon src={p.avatar} size={24} />
+                  <Icon src={p.avatar} size={24} round />
                   <span
                     className={`font-['Outfit:Regular'] text-[14px] leading-[normal] font-normal tracking-[-0.2px] whitespace-nowrap ${
                       p.paid ? 'text-[#2acb70]' : 'text-[#054131]'
@@ -665,7 +747,7 @@ function BillCard({
                 {p.paid ? (
                   <span className="relative size-[20px] shrink-0 overflow-clip">
                     <span className="absolute inset-[8.33%]">
-                      <img alt="Lunas" className="absolute inset-0 block size-full max-w-none" src={img.verified} />
+                      <Img src={img.verified} alt="Lunas" skeleton="rounded-full" />
                     </span>
                   </span>
                 ) : (
@@ -684,6 +766,71 @@ function BillCard({
           })}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ProfileMenu({
+  open,
+  onToggle,
+  onClose,
+  session,
+  onLogout,
+}: {
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+  session: Session
+  onLogout: () => void
+}) {
+  const { mounted, closing } = usePresence(open, 180)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        aria-label="Profil"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="relative block size-[40px] shrink-0 rounded-full transition duration-200 hover:opacity-80 active:scale-95"
+      >
+        <Img src={img.profile} skeleton="rounded-full" />
+      </button>
+      {mounted && (
+        <div
+          role="menu"
+          className={`absolute top-[48px] left-0 w-[220px] origin-top-left rounded-[12px] border border-[#ececec] bg-white p-[6px] shadow-[0_12px_32px_rgba(5,65,49,0.12)] ${
+            closing ? '[animation:menu-out_180ms_ease-in_forwards]' : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
+          }`}
+        >
+          <div className="px-[10px] pt-[8px] pb-[10px]">
+            <p className="font-['Outfit:Medium'] text-[14px] leading-[normal] font-medium text-[#054131]">{session.name}</p>
+            {session.phone && (
+              <p className="mt-[2px] font-['Outfit:Regular'] text-[12px] leading-[normal] text-[#8e8e8e]">{session.phone}</p>
+            )}
+          </div>
+          <div className="h-px bg-[#ececec]" />
+          <button
+            role="menuitem"
+            onClick={onLogout}
+            className="mt-[6px] w-full rounded-[8px] px-[10px] py-[8px] text-left font-['Outfit:Regular'] text-[14px] text-[#d14343] transition-colors duration-200 hover:bg-[#fdf1f1]"
+          >
+            Keluar
+          </button>
+        </div>
+      )}
     </div>
   )
 }
