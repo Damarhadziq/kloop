@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { JenisSheet, LoadingScreen, ScanScreen, jenisOptions, type InputMode, type Jenis } from './ScanFlow'
 
 const a = (f: string) => `/assets/${f}`
 
@@ -273,8 +274,11 @@ export default function App() {
   const [managing, setManaging] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
   const billsRef = useRef<HTMLElement>(null)
+  const [jenisMode, setJenisMode] = useState<InputMode | null>(null)
+  const [jenis, setJenis] = useState<Jenis>(jenisOptions[0])
+  const [screen, setScreen] = useState<'home' | 'scan' | 'loading'>('home')
+  const scanImage = useRef<string | null>(null)
 
   useEffect(() => {
     if (!toast) return
@@ -308,7 +312,7 @@ export default function App() {
     setBills((bs) => [
       {
         id: `m${now.getTime()}`,
-        category: 'Resto & Kafe',
+        category: jenis.title,
         time: `Hari ini, ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':')}`,
         title,
         total,
@@ -319,6 +323,64 @@ export default function App() {
     setSheetOpen(false)
     setToast('Bill baru ditambahkan')
   }
+
+  const selectJenis = (j: Jenis) => {
+    setJenis(j)
+    const mode = jenisMode
+    setJenisMode(null)
+    if (mode === 'scan') setScreen('scan')
+    else setSheetOpen(true)
+  }
+
+  const finishScan = useCallback(() => {
+    if (scanImage.current?.startsWith('blob:')) URL.revokeObjectURL(scanImage.current)
+    scanImage.current = null
+    const now = new Date()
+    setBills((bs) => [
+      {
+        id: `s${now.getTime()}`,
+        category: jenis.title,
+        time: `Hari ini, ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':')}`,
+        title: 'Struk hasil scan',
+        total: 128500,
+        participants: circle.slice(0, 3).map((n) => ({ name: n, avatar: circleAvatars[n], paid: false })),
+      },
+      ...bs,
+    ])
+    setScreen('home')
+    setToast('Struk berhasil dipindai')
+  }, [jenis, circle])
+
+  const toastEl = toast && (
+    <div
+      role="status"
+      className="fixed bottom-[24px] left-1/2 z-50 rounded-[10px] bg-[#054131] px-[16px] py-[10px] font-['Outfit:Regular'] text-[14px] whitespace-nowrap text-white shadow-lg [animation:toast-in_180ms_ease-out]"
+      style={{ transform: 'translateX(-50%)' }}
+    >
+      {toast}
+    </div>
+  )
+
+  if (screen === 'scan')
+    return (
+      <>
+        <ScanScreen
+          onBack={() => setScreen('home')}
+          onManual={() => {
+            setScreen('home')
+            setSheetOpen(true)
+          }}
+          onCaptured={(src) => {
+            scanImage.current = src
+            setScreen('loading')
+          }}
+          notify={setToast}
+        />
+        {toastEl}
+      </>
+    )
+
+  if (screen === 'loading') return <LoadingScreen onBack={() => setScreen('scan')} onDone={finishScan} />
 
   const [featured, ...others] = bills
 
@@ -381,7 +443,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-[10px]">
                   <button
-                    onClick={() => setSheetOpen(true)}
+                    onClick={() => setJenisMode('manual')}
                     className="flex min-w-px flex-1 items-center gap-[6px] rounded-[8px] bg-white px-[12px] py-[8px] transition hover:bg-[#f8f8ec]"
                   >
                     <Icon src={img.docAdd} size={18} />
@@ -390,7 +452,7 @@ export default function App() {
                     </span>
                   </button>
                   <button
-                    onClick={() => fileRef.current?.click()}
+                    onClick={() => setJenisMode('scan')}
                     className="flex min-w-px flex-1 items-center justify-center gap-[6px] rounded-[8px] bg-[#a6bb18] px-[12px] py-[8px] transition hover:bg-[#97ab12] active:scale-[0.98]"
                   >
                     <Icon src={img.scan} size={18} />
@@ -398,18 +460,6 @@ export default function App() {
                       Foto Bill
                     </span>
                   </button>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) setToast(`Struk "${f.name}" sedang diproses`)
-                      e.target.value = ''
-                    }}
-                  />
                 </div>
               </div>
             </section>
@@ -501,7 +551,12 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
             className="flex w-full max-w-[430px] flex-col gap-[14px] rounded-t-[20px] bg-white p-[20px] pb-[28px] md:rounded-[16px] [animation:sheet-in_200ms_ease-out]"
           >
-            <p className="font-['Outfit:Medium'] text-[18px] font-medium tracking-[-0.2px]">Input manual</p>
+            <div className="flex items-center gap-[6px]">
+              <p className="font-['Outfit:Medium'] text-[18px] font-medium tracking-[-0.2px]">Input manual</p>
+              <span className="rounded-[6px] border border-[#ececec] bg-[#f9f9f9] px-[8px] pb-px font-['Outfit:Regular'] text-[14px] leading-[18px] text-[#054131]">
+                {jenis.title}
+              </span>
+            </div>
             <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
               Nama tempat
               <input
@@ -541,15 +596,9 @@ export default function App() {
         </div>
       )}
 
-      {toast && (
-        <div
-          role="status"
-          className="fixed bottom-[24px] left-1/2 z-50 rounded-[10px] bg-[#054131] px-[16px] py-[10px] font-['Outfit:Regular'] text-[14px] whitespace-nowrap text-white shadow-lg [animation:toast-in_180ms_ease-out]"
-          style={{ transform: 'translateX(-50%)' }}
-        >
-          {toast}
-        </div>
-      )}
+      {jenisMode && <JenisSheet mode={jenisMode} onClose={() => setJenisMode(null)} onSelect={selectJenis} />}
+
+      {toastEl}
     </div>
   )
 }
