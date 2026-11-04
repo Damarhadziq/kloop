@@ -1,27 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Img, LogoLoader, Sheet, preloadImage } from './ui'
+import { Img } from '@/components/ui'
+import { SCAN_ICONS } from '@/services/bill.service'
 
-const a = (f: string) => `/assets/${f}`
-
-const icons = {
-  close: a('8423a.svg'),
-  back: a('5ceb4.svg'),
-  flashlight: a('72e1b.svg'),
-  gallery: a('140e3.svg'),
-}
-
-export type InputMode = 'manual' | 'scan'
-
-export const jenisOptions = [
-  { id: 'resto', title: 'Resto & Kafe', desc: 'Hitung per menu pesanan dan pajak/service.', icon: a('18af0.svg') },
-  { id: 'jajan', title: 'Jajanan & Kaki Lima', desc: 'Catat cepat pengeluaran jajan tanpa rincian menu.', icon: a('687d1.svg') },
-  { id: 'flat', title: 'Bagi Rata (Flat)', desc: 'Satu total langsung dibagi rata ke teman terpilih.', icon: a('c0e45.svg') },
-] as const
-
-export type Jenis = (typeof jenisOptions)[number]
-
-/** Every image the scan flow can show, for warming the cache ahead of time. */
-export const SCAN_ASSETS = [...Object.values(icons), ...jenisOptions.map((j) => j.icon)]
+type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean }
 
 function Glyph({ src, size = 24 }: { src: string; size?: number }) {
   return (
@@ -31,7 +12,7 @@ function Glyph({ src, size = 24 }: { src: string; size?: number }) {
   )
 }
 
-function RoundButton({
+export function ScanRoundButton({
   label,
   icon,
   onClick,
@@ -44,6 +25,7 @@ function RoundButton({
 }) {
   return (
     <button
+      type="button"
       aria-label={label}
       aria-pressed={active}
       onClick={onClick}
@@ -55,62 +37,6 @@ function RoundButton({
     </button>
   )
 }
-
-/* ---------------- BOTTOM_SHEET_JENIS ---------------- */
-
-export function JenisSheet({
-  open,
-  mode,
-  onClose,
-  onSelect,
-}: {
-  open: boolean
-  mode: InputMode
-  onClose: () => void
-  onSelect: (j: Jenis) => void
-}) {
-  return (
-    <Sheet open={open} onClose={onClose} labelledBy="jenis-title" className="flex flex-col items-center gap-[16px] px-[16px] pt-[8px] pb-[40px]">
-        <div className="h-[4px] w-[64px] shrink-0 rounded-[12px] bg-[#dedede]" />
-        <div className="flex w-full flex-col gap-[24px]">
-          <div className="flex w-full items-center justify-center gap-[10px]">
-            <div className="flex min-w-px flex-1 items-center gap-[6px]">
-              <p id="jenis-title" className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium text-[#054131]">
-                Mau bagi tagihan jenis apa?
-              </p>
-              <div className="flex shrink-0 items-center justify-center rounded-[6px] border border-[#ececec] bg-[#f9f9f9] px-[8px] pb-px">
-                <p className="font-['Outfit:Regular'] text-[14px] leading-[18px] font-normal whitespace-nowrap text-[#054131]">
-                  {mode === 'scan' ? 'Scan' : 'Manual'}
-                </p>
-              </div>
-            </div>
-            <button aria-label="Tutup" onClick={onClose} className="shrink-0 rounded-full transition hover:opacity-80">
-              <Glyph src={icons.close} />
-            </button>
-          </div>
-          <div className="stagger flex w-full flex-col gap-[12px]">
-            {jenisOptions.map((j) => (
-              <button
-                key={j.id}
-                onClick={() => onSelect(j)}
-                className="flex w-full items-center gap-[10px] rounded-[14px] border border-[#ececec] bg-[#fefef8] p-[12px] text-left transition duration-200 hover:border-[#a6bb18] hover:bg-[#f8f8ec] active:scale-[0.99]"
-              >
-                <Glyph src={j.icon} />
-                <span className="flex min-w-px flex-1 flex-col gap-[4px] leading-[normal]">
-                  <span className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18]">{j.title}</span>
-                  <span className="font-['Outfit:Regular'] text-[12px] font-normal text-[#8e8e8e]">{j.desc}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-    </Sheet>
-  )
-}
-
-/* ---------------- SCAN STRUK (camera) ---------------- */
-
-type TorchCapabilities = MediaTrackCapabilities & { torch?: boolean }
 
 export function ScanScreen({
   onBack,
@@ -180,10 +106,15 @@ export function ScanScreen({
     <div className="flex min-h-dvh w-full flex-col bg-white text-[#054131]">
       <div className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[16px] pt-[24px] pb-[24px] md:pt-[32px]">
         <div className="flex w-full items-center justify-between">
-          <RoundButton label="Kembali" icon={icons.back} onClick={onBack} />
+          <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={onBack} />
           <div className="flex items-center gap-[14px]">
-            <RoundButton label={torch ? 'Matikan senter' : 'Nyalakan senter'} icon={icons.flashlight} onClick={toggleTorch} active={torch} />
-            <RoundButton label="Pilih dari galeri" icon={icons.gallery} onClick={() => fileRef.current?.click()} />
+            <ScanRoundButton
+              label={torch ? 'Matikan senter' : 'Nyalakan senter'}
+              icon={SCAN_ICONS.flashlight}
+              onClick={toggleTorch}
+              active={torch}
+            />
+            <ScanRoundButton label="Pilih dari galeri" icon={SCAN_ICONS.gallery} onClick={() => fileRef.current?.click()} />
             <input
               ref={fileRef}
               type="file"
@@ -200,7 +131,9 @@ export function ScanScreen({
 
         <div className="mt-[54px] flex w-full flex-col items-center gap-[6px] text-center leading-[normal] tracking-[-0.2px]">
           <p className="font-['Outfit:Medium'] text-[18px] font-medium text-[#054131]">Posisikan struk belanja di dalam kotak</p>
-          <p className="font-['Outfit:Regular'] text-[14px] font-normal text-[#8e8e8e]">Pastikan nama menu, harga, dan total terlihat jelas</p>
+          <p className="font-['Outfit:Regular'] text-[14px] font-normal text-[#8e8e8e]">
+            Pastikan nama menu, harga, dan total terlihat jelas
+          </p>
         </div>
 
         <div className="relative mt-[24px] min-h-[360px] w-full flex-1 overflow-clip rounded-[24px] bg-[#d9d9d9] md:max-h-[620px]">
@@ -251,35 +184,3 @@ export function ScanScreen({
   )
 }
 
-/* ---------------- SCAN STRUK (loading) ---------------- */
-
-const MIN_PROCESSING_MS = 1800
-
-export function LoadingScreen({ image, onBack, onDone }: { image: string | null; onBack: () => void; onDone: () => void }) {
-  const [ready, setReady] = useState(false)
-
-  // Ready once the captured photo is decoded and processing has had time to run.
-  useEffect(() => {
-    let alive = true
-    Promise.all([image ? preloadImage(image) : null, new Promise((r) => setTimeout(r, MIN_PROCESSING_MS))]).then(
-      () => alive && setReady(true),
-    )
-    return () => {
-      alive = false
-    }
-  }, [image])
-
-  return (
-    <div className="relative flex min-h-dvh w-full flex-col bg-white" aria-busy={!ready}>
-      <div className="mx-auto w-full max-w-[560px] px-[16px] pt-[24px] md:pt-[32px]">
-        <RoundButton label="Batalkan" icon={icons.back} onClick={onBack} />
-      </div>
-      <div role="status" className="absolute top-[calc(50%-39.5px)] left-1/2 flex w-[152px] -translate-1/2 flex-col items-center gap-[6px]">
-        <LogoLoader ready={ready} onDone={onDone} width={88} />
-        <p className="w-full text-center font-['Outfit:Regular'] text-[16px] leading-[normal] font-normal tracking-[-0.2px] whitespace-nowrap text-[#8e8e8e] [animation:fade-in_500ms_ease-out_300ms_both]">
-          tunggu sebentar ya....
-        </p>
-      </div>
-    </div>
-  )
-}
