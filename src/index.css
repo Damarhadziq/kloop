@@ -49,6 +49,33 @@
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes scan-line {
+  0%, 100% { top: 24px; opacity: 0.4; }
+  50% { top: calc(100% - 26px); opacity: 1; }
+}
+/* Logo "writes" itself left-to-right, holds, then fades for the next loop */
+@keyframes logo-write {
+  0% { clip-path: inset(0 100% 0 0); opacity: 1; }
+  55% { clip-path: inset(0 0 0 0); opacity: 1; }
+  85% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(0 0 0 0); opacity: 0; }
+}
+@keyframes logo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes dot {
+  0%, 60%, 100% { opacity: 0.2; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
 }
