@@ -21,6 +21,7 @@ Start with task-relevant files below. Follow the modular Feature-First boundarie
 - `src/services/` - Asynchronous data & auth service layer (currently backed by structured mock data + simulated Promise delays, ready to swap with Supabase queries without touching UI components):
   - `src/services/auth.service.ts` - `login`, `registerUser`, `verifyOtp`, `requestPasswordReset`, `resetPassword`, session persistence helpers
   - `src/services/bill.service.ts` - `getActiveBills`, `getCircleFriends`, `getTalanganSummary`, `parseScannedReceipt`, `createBill`, `verifyPayment`, `formatRupiah`, and asset registries
+  - `src/services/scanner.service.ts` - Real-time camera frame analyzer (`analyzeVideoFrame`), pixel/edge receipt validator (`analyzeReceiptImage`), OCR receipt draft builder, and simulation presets (`SCAN_SIMULATION_PRESETS`)
 - `src/components/ui/` - Atomic, reusable UI primitives and motion hooks:
   - `Avatar.tsx` (`Avatar`, `Icon`)
   - `Badge.tsx` (`Badge`)
@@ -55,8 +56,9 @@ Start with task-relevant files below. Follow the modular Feature-First boundarie
   - `ProfileMenu.tsx` - Header avatar dropdown menu
 - `src/features/split-bill/` - Receipt scanning, manual input, and item-level or equal bill splitting:
   - `JenisSheet.tsx` - Category selection bottom sheet (`Resto & Kafe`, `Jajanan & Kaki Lima`, `Bagi Rata (Flat)`)
-  - `ScanScreen.tsx` - Camera viewfinder, torch toggle, and gallery picker
-  - `LoadingScreen.tsx` - Animated Kloop logo receipt processing screen
+  - `ScanScreen.tsx` - Camera viewfinder, live sensor telemetry, receipt laser & OCR box scanning animation, torch toggle, gallery picker, and condition simulator
+  - `ReceiptValidationModal.tsx` - Pop-up alert modal when a scanned receipt is invalid or poorly visible (too dark, blurry, faded ink, glare/overexposed, or non-receipt)
+  - `LoadingScreen.tsx` - Animated Kloop logo & mini receipt OCR extraction processing screen
   - `ManualInputSheet.tsx` - Quick manual expense bottom sheet with link to per-menu split
   - `SplitBillScreen.tsx` - Interactive bill split editor (`Per Menu` vs `Bagi Rata` tabs, friend avatar assignment per item, tax/service calculation)
 - `src/features/bill-summary/` - Bill breakdown & payment verification:

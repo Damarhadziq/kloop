@@ -9,9 +9,6 @@ export const authIcons = {
   back: a('5ceb4.svg'),
   support: a('40c1c.svg'),
   eyeClosed: a('b7d53.svg'),
-  heroBill: a('068d6.png'),
-  heroMasuk: a('d6d31.png'),
-  heroTagihan: a('5ee37.png'),
 } as const
 
 /** Images the first auth screen needs, preloaded while the splash plays. */

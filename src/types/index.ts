@@ -85,3 +85,59 @@ export interface JenisOption {
   readonly icon: string
 }
 
+export type ReceiptValidationIssueCode =
+  | 'too_dark'
+  | 'blurry'
+  | 'glare_overexposed'
+  | 'low_contrast_faded'
+  | 'not_receipt'
+  | 'resolution_too_small'
+
+export interface ReceiptQualityMetrics {
+  /** 0 - 100 average luminance score */
+  brightness: number
+  /** 0 - 100 edge sharpness / focus score */
+  sharpness: number
+  /** 0 - 100 text-to-paper contrast score */
+  contrast: number
+  /** 0 - 100 percentage of overexposed / glare pixels */
+  glareRatio: number
+  /** 0 - 100 estimated horizontal receipt text-line density */
+  textDensity: number
+  /** 0 - 100 overall OCR / receipt recognition confidence */
+  confidence: number
+  width: number
+  height: number
+}
+
+export interface ReceiptValidationIssue {
+  code: ReceiptValidationIssueCode
+  severity: 'error' | 'warning'
+  title: string
+  subtitle: string
+  description: string
+  tips: string[]
+  canForceContinue: boolean
+  suggestTorch?: boolean
+}
+
+export interface ScannedReceiptDraft {
+  title: string
+  category: string
+  items: BillItem[]
+  taxAmount: number
+  serviceAmount: number
+  discountAmount: number
+  detectedTextLines?: string[]
+  confidence?: number
+}
+
+export interface ReceiptScanAnalysisResult {
+  valid: boolean
+  metrics: ReceiptQualityMetrics
+  issue: ReceiptValidationIssue | null
+  draft: ScannedReceiptDraft | null
+  detectedLines: string[]
+}
+
+

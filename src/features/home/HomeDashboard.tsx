@@ -22,7 +22,7 @@ import {
   type CircleName,
   type CreateBillInput,
 } from '@/services/bill.service'
-import type { Bill, InputMode, PaymentStatus, Session } from '@/types'
+import type { Bill, InputMode, PaymentStatus, ReceiptScanAnalysisResult, Session } from '@/types'
 import { ActiveBillCard } from './ActiveBillCard'
 import { CircleSection } from './CircleSection'
 import { HeroActionCard } from './HeroActionCard'
@@ -65,6 +65,7 @@ export function HomeDashboard({
   })
 
   const scanImage = useRef<string | null>(null)
+  const [scanAnalysis, setScanAnalysis] = useState<ReceiptScanAnalysisResult | null>(null)
   const { shown: shownScreen, leaving } = useSwitch(screen)
 
   // Fetch initial dashboard data via service with simulated skeleton delay (750ms)
@@ -174,14 +175,17 @@ export function HomeDashboard({
   const finishScan = useCallback(() => {
     if (scanImage.current?.startsWith('blob:')) URL.revokeObjectURL(scanImage.current)
     scanImage.current = null
+    const draft = scanAnalysis?.draft
+    const draftSubtotal = draft ? draft.items.reduce((sum, it) => sum + it.price, 0) : 113000
+    const draftTotal = draft ? draftSubtotal + draft.taxAmount + draft.serviceAmount - draft.discountAmount : 128500
     setSplitDraft({
-      title: 'Struk hasil scan',
-      total: 128500,
+      title: draft?.title || 'Kopi Nako Tembalang',
+      total: draftTotal,
       fromScan: true,
     })
     setScreen('split-bill')
-    setToast('Struk berhasil dipindai')
-  }, [setToast])
+    setToast('Struk berhasil dipindai & diekstrak')
+  }, [scanAnalysis, setToast])
 
   const handleSaveSplitBill = async (input: CreateBillInput) => {
     const created = await createBill(input, 200)
@@ -195,13 +199,16 @@ export function HomeDashboard({
     return (
       <div key="scan" className={screenClass(leaving)}>
         <ScanScreen
+          categoryTitle={jenis.title}
+          participantIds={circle.slice(0, 3)}
           onBack={() => setScreen('home')}
           onManual={() => {
             setScreen('home')
             setTimeout(() => setSheetOpen(true), 360)
           }}
-          onCaptured={(src) => {
+          onCaptured={(src, analysis) => {
             scanImage.current = src
+            setScanAnalysis(analysis ?? null)
             setScreen('loading')
           }}
           notify={setToast}
@@ -212,7 +219,12 @@ export function HomeDashboard({
   if (shownScreen === 'loading')
     return (
       <div key="loading" className={screenClass(leaving)}>
-        <LoadingScreen image={scanImage.current} onBack={() => setScreen('scan')} onDone={finishScan} />
+        <LoadingScreen
+          image={scanImage.current}
+          analysis={scanAnalysis}
+          onBack={() => setScreen('scan')}
+          onDone={finishScan}
+        />
       </div>
     )
 

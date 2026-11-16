@@ -33,18 +33,22 @@ react(),
       },
     },
     server: {
-      host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
+      host: process.env.FIGMA_DEV_SERVER_HOST || true,
       port: parseInt(process.env.PORT || '8443'),
       strictPort: false,
+      allowedHosts: true,
+      cors: true,
       watch: {
         ignored: [
           '**/.figma/**',
-],
+        ],
       },
     },
     preview: {
-      host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
+      host: process.env.FIGMA_DEV_SERVER_HOST || true,
       port: parseInt(process.env.PORT || '8443'),
+      allowedHosts: true,
+      cors: true,
     },
   }
 })

@@ -4,10 +4,15 @@ import type {
   BillParticipant,
   JenisOption,
   PaymentStatus,
+  ScannedReceiptDraft,
   SplitMethod,
   TalanganSummary,
   UserProfile,
 } from '@/types'
+import { createReceiptDraftForCategory } from './scanner.service'
+
+export type { ScannedReceiptDraft }
+
 
 const a = (f: string) => `/assets/${f}`
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -285,55 +290,13 @@ export async function getTalanganSummary(delayMs = 750): Promise<TalanganSummary
   return INITIAL_TALANGAN
 }
 
-export interface ScannedReceiptDraft {
-  title: string
-  category: string
-  items: BillItem[]
-  taxAmount: number
-  serviceAmount: number
-  discountAmount: number
-}
-
 export async function parseScannedReceipt(
   category: string,
   participantIds: string[],
   delayMs = 800,
 ): Promise<ScannedReceiptDraft> {
   await wait(delayMs)
-  const billId = 'draft-scan'
-  return {
-    title: 'Struk hasil scan',
-    category,
-    taxAmount: 11500,
-    serviceAmount: 4000,
-    discountAmount: 0,
-    items: [
-      {
-        id: 'scan-item-1',
-        billId,
-        name: 'Iced Caramel Macchiato',
-        qty: 1,
-        price: 38000,
-        assignedParticipantIds: participantIds.slice(0, 1),
-      },
-      {
-        id: 'scan-item-2',
-        billId,
-        name: 'Nasi Goreng Kampung Spesial',
-        qty: 1,
-        price: 45000,
-        assignedParticipantIds: participantIds.slice(1, 2).length ? participantIds.slice(1, 2) : participantIds.slice(0, 1),
-      },
-      {
-        id: 'scan-item-3',
-        billId,
-        name: 'French Fries Truffle',
-        qty: 1,
-        price: 30000,
-        assignedParticipantIds: [...participantIds],
-      },
-    ],
-  }
+  return createReceiptDraftForCategory(category, participantIds)
 }
 
 export interface CreateBillInput {

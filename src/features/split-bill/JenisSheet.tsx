@@ -1,17 +1,9 @@
-import { Img, Sheet } from '@/components/ui'
+import { Icon, Sheet } from '@/components/ui'
 import { JENIS_OPTIONS, SCAN_ICONS } from '@/services/bill.service'
 import type { InputMode, JenisOption } from '@/types'
 
 export const jenisOptions = JENIS_OPTIONS
 export type Jenis = JenisOption
-
-function Glyph({ src, size = 24 }: { src: string; size?: number }) {
-  return (
-    <span className="relative block shrink-0" style={{ width: size, height: size }}>
-      <Img src={src} skeleton="rounded-[5px]" />
-    </span>
-  )
-}
 
 export function JenisSheet({
   open,
@@ -45,7 +37,7 @@ export function JenisSheet({
             </div>
           </div>
           <button aria-label="Tutup" onClick={onClose} className="shrink-0 rounded-full transition hover:opacity-80">
-            <Glyph src={SCAN_ICONS.close} />
+            <Icon src={SCAN_ICONS.close} size={24} />
           </button>
         </div>
         <div className="stagger flex w-full flex-col gap-[12px]">
@@ -55,7 +47,7 @@ export function JenisSheet({
               onClick={() => onSelect(j)}
               className="flex w-full items-center gap-[10px] rounded-[14px] border border-[#ececec] bg-[#fefef8] p-[12px] text-left transition duration-200 hover:border-[#a6bb18] hover:bg-[#f8f8ec] active:scale-[0.99]"
             >
-              <Glyph src={j.icon} />
+              <Icon src={j.icon} size={24} />
               <span className="flex min-w-px flex-1 flex-col gap-[4px] leading-[normal]">
                 <span className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18]">{j.title}</span>
                 <span className="font-['Outfit:Regular'] text-[12px] font-normal text-[#8e8e8e]">{j.desc}</span>
@@ -67,4 +59,5 @@ export function JenisSheet({
     </Sheet>
   )
 }
+
 
