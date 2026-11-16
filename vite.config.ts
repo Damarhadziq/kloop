@@ -2,6 +2,7 @@ import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
@@ -19,8 +20,9 @@ export default defineConfig(({ mode }) => {
       minify: !emitSourcemaps,
     },
     plugins: [
-react(),
+      react(),
       tailwindcss(),
+      mobileTunnelMirrorPortPlugin(5173),
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
@@ -33,7 +35,7 @@ react(),
       },
     },
     server: {
-      host: process.env.FIGMA_DEV_SERVER_HOST || true,
+      host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
       port: parseInt(process.env.PORT || '8443'),
       strictPort: false,
       allowedHosts: true,
@@ -45,13 +47,42 @@ react(),
       },
     },
     preview: {
-      host: process.env.FIGMA_DEV_SERVER_HOST || true,
+      host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
       port: parseInt(process.env.PORT || '8443'),
       allowedHosts: true,
       cors: true,
     },
   }
 })
+
+/**
+ * Exposes an additional standard HTTP mirror port (5173) alongside 8443.
+ * Why: VS Code Dev Tunnels automatically assumes port `8443` uses HTTPS (TLS)
+ * because it ends in `443`, causing 502 "unable to handle this request" when
+ * forwarding plain HTTP on 8443 unless the user manually changes Port Protocol to HTTP.
+ * Listening on 5173 as well lets port forwarding work out-of-the-box over HTTP.
+ */
+function mobileTunnelMirrorPortPlugin(mirrorPort = 5173): Plugin {
+  let mirrorServer: http.Server | null = null
+  return {
+    name: 'mobile-tunnel-mirror-port',
+    apply: 'serve',
+    configureServer(server) {
+      if (mirrorServer) return
+      mirrorServer = http.createServer((req, res) => {
+        server.middlewares(req, res)
+      })
+      mirrorServer.on('error', () => {
+        /* ignore if port 5173 is already in use */
+      })
+      mirrorServer.listen(mirrorPort, '0.0.0.0')
+      server.httpServer?.once('close', () => {
+        mirrorServer?.close()
+        mirrorServer = null
+      })
+    },
+  }
+}
 
 type FigmaSiteConfiguration = {
   title?: string
