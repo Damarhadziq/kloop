@@ -74,8 +74,9 @@ export function SplitBillScreen({
   const [menuListOpen, setMenuListOpen] = useState(false)
   const { mounted: menuListMounted, closing: menuListClosing } = usePresence(menuListOpen, 180)
 
-  // Hold-and-drag state for the right-side vertical ellipse rail (strictly visible ONLY while held)
+  // Hold-and-drag state for the right-side vertical ellipse rail (strictly visible ONLY while held, never on simple tap)
   const [isHoldingRail, setIsHoldingRail] = useState(false)
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const railRef = useRef<HTMLDivElement>(null)
 
   const menuPopoverRef = useRef<HTMLDivElement>(null)
@@ -143,8 +144,13 @@ export function SplitBillScreen({
 
   // Guarantee floating pills hide immediately whenever finger/pointer is released anywhere on screen
   useEffect(() => {
-    if (!isHoldingRail) return
-    const endHold = () => setIsHoldingRail(false)
+    const endHold = () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current)
+        holdTimerRef.current = null
+      }
+      setIsHoldingRail(false)
+    }
     window.addEventListener('pointerup', endHold)
     window.addEventListener('pointercancel', endHold)
     window.addEventListener('touchend', endHold)
@@ -157,7 +163,7 @@ export function SplitBillScreen({
       window.removeEventListener('touchcancel', endHold)
       window.removeEventListener('blur', endHold)
     }
-  }, [isHoldingRail])
+  }, [])
 
   const pageMetaList = useMemo(() => {
     const list: { index: number; shortTitle: string }[] = [
@@ -227,7 +233,7 @@ export function SplitBillScreen({
       const rail = railRef.current
       if (!rail || totalPages <= 1) return 0
       const rect = rail.getBoundingClientRect()
-      const pad = 12
+      const pad = 16
       const usableTop = rect.top + pad
       const usableHeight = Math.max(1, rect.height - pad * 2)
       const ratio = Math.max(0, Math.min(1, (clientY - usableTop) / usableHeight))
@@ -236,16 +242,19 @@ export function SplitBillScreen({
     [totalPages],
   )
 
+  // Hold-only trigger on right-side ellipse rail (tapping does NOT switch cards)
   const handleRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault()
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
-      /* ignore if pointer capture not supported */
+      /* ignore */
     }
-    setIsHoldingRail(true)
-    const targetIdx = resolveRailIndexAtClientY(e.clientY)
-    scrollToPage(targetIdx, 'smooth')
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    // Require a genuine hold (200ms) before activating floating scrub mode; a quick tap does nothing
+    holdTimerRef.current = setTimeout(() => {
+      setIsHoldingRail(true)
+    }, 200)
   }
 
   const handleRailPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -257,6 +266,10 @@ export function SplitBillScreen({
   }
 
   const handleRailPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
     try {
       if (e.currentTarget.hasPointerCapture(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId)
@@ -466,26 +479,13 @@ export function SplitBillScreen({
   const inputBoxClass =
     "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[12px] font-['Outfit:Regular'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
 
-  // Computes the 3D sunken/submerged stack effect for adjacent cards vs the active main card
-  const getSectionStackClass = (cardIdx: number) => {
-    const diff = cardIdx - activePageIdx
-    if (diff === 0) {
-      return 'relative z-20 my-[2px]'
-    }
-    if (diff < 0) {
-      // Previous card above: pulled close & tucked under the active card
-      return 'relative z-0 -mb-[26px]'
-    }
-    // Next card below: pulled close & tucked under the active card
-    return 'relative z-0 -mt-[26px]'
-  }
-
+  // Inactive cards are purely display-only (disabled, non-clickable, scaled down slightly)
   const getCardStackClass = (cardIdx: number) => {
     const isActive = activePageIdx === cardIdx
-    return `relative overflow-hidden w-full max-w-[388px] rounded-[20px] border bg-white p-[16px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+    return `relative w-full max-w-[366px] rounded-[20px] border bg-white p-[16px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
       isActive
-        ? 'scale-100 opacity-100 border-[#ececec] shadow-[0_16px_38px_rgba(5,65,49,0.09)]'
-        : 'scale-[0.90] border-[#ececec]/70 shadow-none select-none'
+        ? 'z-20 scale-100 opacity-100 border-[#ececec] shadow-[0_14px_34px_rgba(5,65,49,0.08)]'
+        : 'z-0 pointer-events-none select-none scale-[0.91] opacity-55 border-[#ececec]/80 shadow-none'
     }`
   }
 
@@ -510,7 +510,7 @@ export function SplitBillScreen({
       </div>
 
       {/* Fixed Header */}
-      <header className="fixed inset-x-0 top-0 z-40 bg-white/92 px-[16px] pt-[20px] pb-[12px] backdrop-blur-md md:pt-[28px]">
+      <header className="fixed inset-x-0 top-0 z-40 bg-white px-[16px] pt-[20px] pb-[12px] md:pt-[28px]">
         <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
 
@@ -615,7 +615,7 @@ export function SplitBillScreen({
         </div>
       </header>
 
-      {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail (Floating pills ONLY exist while held) */}
+      {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail (Wider gap, hold-only, no tap switch) */}
       <div
         ref={railRef}
         onPointerDown={handleRailPointerDown}
@@ -623,25 +623,25 @@ export function SplitBillScreen({
         onPointerUp={handleRailPointerEnd}
         onPointerCancel={handleRailPointerEnd}
         onLostPointerCapture={() => setIsHoldingRail(false)}
-        className="fixed top-1/2 right-[4px] z-40 flex -translate-y-1/2 cursor-grab touch-none select-none flex-col items-end gap-[9px] py-[18px] pl-[18px] pr-[6px] active:cursor-grabbing md:right-[16px]"
+        className="fixed top-1/2 right-[8px] z-40 flex -translate-y-1/2 touch-none select-none flex-col items-end gap-[14px] py-[22px] pl-[20px] pr-[6px] md:right-[20px]"
       >
         {pageMetaList.map((meta) => {
           const isActive = activePageIdx === meta.index
           const distance = Math.abs(activePageIdx - meta.index)
 
           const waveTransform = isActive
-            ? '-translate-x-[14px] scale-[1.06]'
+            ? '-translate-x-[16px] scale-[1.06]'
             : distance === 1
-              ? '-translate-x-[5px] scale-[1.0]'
+              ? '-translate-x-[6px] scale-[1.0]'
               : 'translate-x-0 scale-[0.94] opacity-75'
 
           return (
-            <div key={meta.index} className="relative flex h-[22px] items-center justify-end">
+            <div key={meta.index} className="relative flex h-[24px] items-center justify-end">
               {/* Floating Pill appears ONLY while user is actively holding the rail */}
               {isHoldingRail && (
                 <div
                   style={{ animationDelay: `${meta.index * 20}ms` }}
-                  className={`pointer-events-none mr-[10px] flex max-w-[180px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-150 ease-out [animation:float-pill-in_180ms_cubic-bezier(0.34,1.56,0.64,1)_both] ${waveTransform} ${
+                  className={`pointer-events-none mr-[14px] flex max-w-[184px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-150 ease-out [animation:float-pill-in_180ms_cubic-bezier(0.34,1.56,0.64,1)_both] ${waveTransform} ${
                     isActive
                       ? 'border-[#a6bb18] bg-[#054131] text-white'
                       : 'border-[#ececec] bg-white/95 text-[#054131]'
@@ -657,7 +657,7 @@ export function SplitBillScreen({
               <span
                 className={`block rounded-full transition-all duration-200 ${
                   isActive
-                    ? 'h-[22px] w-[7px] bg-[#a6bb18] shadow-[0_0_8px_rgba(166,187,24,0.45)]'
+                    ? 'h-[24px] w-[7px] bg-[#a6bb18] shadow-[0_0_8px_rgba(166,187,24,0.45)]'
                     : 'h-[7px] w-[7px] bg-[#dedede]'
                 }`}
               />
@@ -668,41 +668,33 @@ export function SplitBillScreen({
 
       {/* Main Stacked Carousel Viewport */}
       <div className="relative h-full w-full pt-[68px]">
-        {/* Top White Blur Layer to submerge the upper peeking card */}
+        {/* Top White Gradient Blur Layer Mask (covers the upper part of the previous card so only a small edge peeks) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-[68px] z-30 h-[96px] bg-gradient-to-b from-white via-white/88 to-transparent backdrop-blur-[4px]"
+          className="pointer-events-none absolute inset-x-0 top-[68px] z-30 h-[118px] bg-gradient-to-b from-white from-30% via-white/90 via-65% to-transparent"
         />
 
-        {/* Bottom White Blur Layer to submerge the lower peeking card */}
+        {/* Bottom White Gradient Blur Layer Mask (covers the lower part of the next card so only a small edge peeks) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[96px] bg-gradient-to-t from-white via-white/88 to-transparent backdrop-blur-[4px]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[118px] bg-gradient-to-t from-white from-30% via-white/90 via-65% to-transparent"
         />
 
-        {/* Stacked Vertical Scroll Container */}
+        {/* Stacked Vertical Scroll Container (Generous gap-[38px] between cards + wider right padding pr-[38px] for rail gap) */}
         <div
           ref={pageScrollRef}
           onScroll={handleViewportScroll}
-          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center overflow-y-auto px-[16px] pr-[26px] py-[13vh] scroll-smooth"
+          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[38px] overflow-y-auto pl-[16px] pr-[38px] py-[16vh] scroll-smooth"
         >
           {/* CARD 0: Nama Tempat, Metode Pembagian, & Teman Patungan */}
           <section
             ref={(el) => {
               pageRefs.current[0] = el
             }}
-            onClick={() => activePageIdx !== 0 && scrollToPage(0)}
-            className={`flex w-full shrink-0 snap-center justify-center transition-all duration-500 ${getSectionStackClass(0)}`}
+            aria-disabled={activePageIdx !== 0}
+            className="flex w-full shrink-0 snap-center justify-center"
           >
-            <div className={`flex flex-col gap-[15px] ${getCardStackClass(0)}`}>
-              {/* White Blur Layer directly over inactive card so it looks submerged */}
-              {activePageIdx !== 0 && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 z-20 rounded-[20px] bg-white/72 backdrop-blur-[5px] transition-opacity duration-300"
-                />
-              )}
-
+            <div inert={activePageIdx !== 0 ? true : undefined} className={`flex flex-col gap-[15px] ${getCardStackClass(0)}`}>
               <label className="flex w-full flex-col gap-[8px]">
                 <span className={labelTextClass}>Nama Tempat / Tagihan</span>
                 <input
@@ -846,18 +838,10 @@ export function SplitBillScreen({
                   ref={(el) => {
                     pageRefs.current[pageIndex] = el
                   }}
-                  onClick={() => !isCardActive && scrollToPage(pageIndex)}
-                  className={`flex w-full shrink-0 snap-center justify-center transition-all duration-500 ${getSectionStackClass(pageIndex)}`}
+                  aria-disabled={!isCardActive}
+                  className="flex w-full shrink-0 snap-center justify-center"
                 >
-                  <div className={`flex flex-col gap-[14px] ${getCardStackClass(pageIndex)}`}>
-                    {/* White Blur Layer directly over inactive card so it looks submerged */}
-                    {!isCardActive && (
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute inset-0 z-20 rounded-[20px] bg-white/72 backdrop-blur-[5px] transition-opacity duration-300"
-                      />
-                    )}
-
+                  <div inert={!isCardActive ? true : undefined} className={`flex flex-col gap-[14px] ${getCardStackClass(pageIndex)}`}>
                     {/* Menu Index without background frame + Icon-only Delete button */}
                     <div className="flex items-center justify-between gap-[8px]">
                       <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18]">
@@ -996,18 +980,10 @@ export function SplitBillScreen({
             ref={(el) => {
               pageRefs.current[totalPages - 1] = el
             }}
-            onClick={() => activePageIdx !== totalPages - 1 && scrollToPage(totalPages - 1)}
-            className={`flex w-full shrink-0 snap-center justify-center transition-all duration-500 ${getSectionStackClass(totalPages - 1)}`}
+            aria-disabled={activePageIdx !== totalPages - 1}
+            className="flex w-full shrink-0 snap-center justify-center"
           >
-            <div className={`flex flex-col gap-[14px] ${getCardStackClass(totalPages - 1)}`}>
-              {/* White Blur Layer directly over inactive card so it looks submerged */}
-              {activePageIdx !== totalPages - 1 && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 z-20 rounded-[20px] bg-white/72 backdrop-blur-[5px] transition-opacity duration-300"
-                />
-              )}
-
+            <div inert={activePageIdx !== totalPages - 1 ? true : undefined} className={`flex flex-col gap-[14px] ${getCardStackClass(totalPages - 1)}`}>
               {splitMethod === 'per_item' ? (
                 <>
                   {/* Form Tambah Menu Baru */}
