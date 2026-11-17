@@ -32,7 +32,7 @@ export function Sheet({
   // turn `fixed` into "fixed to the scrolling page" and push the sheet off-screen.
   return createPortal(
     <div
-      className={`fixed inset-0 z-40 flex items-end justify-center overscroll-none bg-[#054131]/30 ${
+      className={`fixed inset-0 z-40 flex touch-none items-end justify-center overscroll-none bg-[#054131]/30 ${
         closing ? '[animation:fade-out_260ms_ease-in_forwards]' : '[animation:fade-in_220ms_ease-out]'
       }`}
       onClick={onClose}
@@ -42,7 +42,7 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={labelledBy}
         onClick={(e) => e.stopPropagation()}
-        className={`max-h-[calc(100dvh-24px)] w-full max-w-[560px] overflow-y-auto overscroll-contain rounded-t-[24px] bg-white ${className} ${
+        className={`max-h-[calc(100dvh-24px)] w-full max-w-[560px] touch-pan-y overflow-y-auto overscroll-contain rounded-t-[24px] bg-white ${className} ${
           closing
             ? '[animation:sheet-down_260ms_cubic-bezier(0.4,0,1,1)_forwards]'
             : '[animation:sheet-up_360ms_cubic-bezier(0.2,0.8,0.2,1)]'

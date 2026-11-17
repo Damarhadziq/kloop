@@ -66,17 +66,42 @@ export function useToast(duration = 2400) {
 }
 
 /**
- * Locks page scrolling while any overlay is mounted. Counted, so overlays that
- * hand off to each other (one closing while the next opens) never unlock early.
+ * Locks page scrolling while any overlay/bottom-sheet is mounted.
+ * Uses fixed-body positioning with saved scrollY so mobile touch-scrolling
+ * on the background page is completely prevented.
  */
 let scrollLocks = 0
+let savedScrollY = 0
 export function useScrollLock(active: boolean) {
   useEffect(() => {
     if (!active) return
     const root = document.documentElement
-    if (scrollLocks++ === 0) root.style.overflow = 'hidden'
+    const body = document.body
+    if (scrollLocks++ === 0) {
+      savedScrollY = window.scrollY
+      root.style.overflow = 'hidden'
+      root.style.overscrollBehavior = 'none'
+      body.style.overflow = 'hidden'
+      body.style.overscrollBehavior = 'none'
+      body.style.position = 'fixed'
+      body.style.top = `-${savedScrollY}px`
+      body.style.left = '0'
+      body.style.right = '0'
+      body.style.width = '100%'
+    }
     return () => {
-      if (--scrollLocks === 0) root.style.overflow = ''
+      if (--scrollLocks === 0) {
+        root.style.overflow = ''
+        root.style.overscrollBehavior = ''
+        body.style.overflow = ''
+        body.style.overscrollBehavior = ''
+        body.style.position = ''
+        body.style.top = ''
+        body.style.left = ''
+        body.style.right = ''
+        body.style.width = ''
+        window.scrollTo(0, savedScrollY)
+      }
     }
   }, [active])
 }

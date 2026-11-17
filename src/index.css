@@ -33,22 +33,18 @@
   html {
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
-    background: #fff;
+    background: #ffffff;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
   }
   body {
     font-family: 'Outfit:Regular', system-ui, sans-serif;
-    background: #fff;
+    background: #ffffff;
     color: #054131;
     min-height: 100dvh;
-    min-height: -webkit-fill-available;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   #root {
     min-height: 100dvh;
-    background: #fff;
+    background: #ffffff;
   }
 
   /* Thin, low-contrast scrollbars that stay out of the way */

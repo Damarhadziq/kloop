@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { ScanResultSkeleton, useSimulatedLoading } from '@/components/skeletons'
 import { ConfirmModal, Icon, Img, KLOOP_LOGO, PrimaryButton, usePresence, useScrollBarOnScroll } from '@/components/ui'
 import {
@@ -58,23 +58,24 @@ export function SplitBillScreen({
   const [newItemPrice, setNewItemPrice] = useState('')
   const [newItemQty, setNewItemQty] = useState('1')
 
-  // Full-page view index:
-  // Page 0 = Nama Tempat & Siapa Aja yang Ikut Patungan
-  // Page 1..items.length = Menu 1..N (when splitMethod === 'per_item')
-  // Last Page = Pajak, Tambah Menu & Ringkasan Pembagian
+  // Active stacked card index:
+  // 0 = Nama Tempat & Teman Patungan
+  // 1..items.length = Menu 1..N (when splitMethod === 'per_item')
+  // Last = Pajak, Tambah Menu & Ringkasan
   const [activePageIdx, setActivePageIdx] = useState(0)
   const [menuListOpen, setMenuListOpen] = useState(false)
   const { mounted: menuListMounted, closing: menuListClosing } = usePresence(menuListOpen, 180)
 
-  // Floating menu state on the right-side vertical ellipse rail
-  const [floatRailExpanded, setFloatRailExpanded] = useState(false)
-  const [activeFloatToastVisible, setActiveFloatToastVisible] = useState(true)
-  const floatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Hold-and-drag state for the right-side vertical ellipse rail
+  const [isHoldingRail, setIsHoldingRail] = useState(false)
+  const { mounted: floatMenuMounted, closing: floatMenuClosing } = usePresence(isHoldingRail, 180)
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const railRef = useRef<HTMLDivElement>(null)
+  const dotRefs = useRef<(HTMLDivElement | null)[]>([])
 
   const menuPopoverRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
-  const pageRefs = useRef<(HTMLDivElement | null)[]>([])
+  const pageRefs = useRef<(HTMLElement | null)[]>([])
   const { onScroll: onFriendChipScroll, scrollClassName: friendChipScrollClass } = useScrollBarOnScroll()
 
   // Confirmation modal state for destructive actions
@@ -135,32 +136,17 @@ export function SplitBillScreen({
     }
   }, [menuListOpen])
 
-  // Close expanded float rail when tapping outside
   useEffect(() => {
-    if (!floatRailExpanded) return
-    const onDown = (e: PointerEvent) => !railRef.current?.contains(e.target as Node) && setFloatRailExpanded(false)
-    window.addEventListener('pointerdown', onDown)
-    return () => window.removeEventListener('pointerdown', onDown)
-  }, [floatRailExpanded])
-
-  // Briefly reveal the active ellipse's floating badge whenever activePageIdx changes
-  useEffect(() => {
-    setActiveFloatToastVisible(true)
-    if (floatTimerRef.current) clearTimeout(floatTimerRef.current)
-    floatTimerRef.current = setTimeout(() => {
-      setActiveFloatToastVisible(false)
-    }, 1800)
     return () => {
-      if (floatTimerRef.current) clearTimeout(floatTimerRef.current)
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     }
-  }, [activePageIdx])
+  }, [])
 
   const pageMetaList = useMemo(() => {
-    const list: { index: number; shortTitle: string; subtitle: string }[] = [
+    const list: { index: number; shortTitle: string }[] = [
       {
         index: 0,
         shortTitle: 'Tempat & Teman',
-        subtitle: `${selectedFriends.length} teman`,
       },
     ]
     if (splitMethod === 'per_item') {
@@ -168,41 +154,113 @@ export function SplitBillScreen({
         list.push({
           index: idx + 1,
           shortTitle: it.name || `Menu ${idx + 1}`,
-          subtitle: formatRupiah(it.price),
         })
       })
     }
     list.push({
       index: list.length,
       shortTitle: 'Ringkasan & Simpan',
-      subtitle: formatRupiah(
-        splitMethod === 'equal'
-          ? Number(equalTotalInput.replace(/\D/g, '')) || 0
-          : Math.max(0, items.reduce((a, b) => a + b.price, 0) + taxAmount + serviceAmount - discountAmount),
-      ),
     })
     return list
-  }, [selectedFriends.length, splitMethod, items, equalTotalInput, taxAmount, serviceAmount, discountAmount])
+  }, [splitMethod, items])
 
   const totalPages = pageMetaList.length
 
-  const scrollToPage = (pageIdx: number) => {
-    const clamped = Math.max(0, Math.min(totalPages - 1, pageIdx))
-    setActivePageIdx(clamped)
-    const target = pageRefs.current[clamped]
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const scrollToPage = useCallback(
+    (pageIdx: number, behavior: ScrollBehavior = 'smooth') => {
+      const clamped = Math.max(0, Math.min(totalPages - 1, pageIdx))
+      setActivePageIdx(clamped)
+      const target = pageRefs.current[clamped]
+      if (target) {
+        target.scrollIntoView({ behavior, block: 'center' })
+      }
+    },
+    [totalPages],
+  )
+
+  // Detect which stacked card is closest to the vertical center of the scroll viewport
+  const handleViewportScroll = () => {
+    if (isHoldingRail) return
+    const container = pageScrollRef.current
+    if (!container) return
+    const containerRect = container.getBoundingClientRect()
+    const centerY = containerRect.top + containerRect.height / 2
+
+    let bestIdx = activePageIdx
+    let minDistance = Infinity
+    for (let i = 0; i < totalPages; i++) {
+      const el = pageRefs.current[i]
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      const cardCenterY = rect.top + rect.height / 2
+      const dist = Math.abs(cardCenterY - centerY)
+      if (dist < minDistance) {
+        minDistance = dist
+        bestIdx = i
+      }
+    }
+    if (bestIdx !== activePageIdx) {
+      setActivePageIdx(bestIdx)
     }
   }
 
-  const handleViewportScroll = () => {
-    const container = pageScrollRef.current
-    if (!container) return
-    const pageH = container.clientHeight || window.innerHeight || 640
-    const idx = Math.max(0, Math.min(totalPages - 1, Math.round(container.scrollTop / pageH)))
-    if (idx !== activePageIdx) {
-      setActivePageIdx(idx)
+  // Resolve which ellipse index the user's finger Y position is pointing at during hold-and-drag
+  const resolveRailIndexAtClientY = useCallback(
+    (clientY: number): number => {
+      let closestIdx = activePageIdx
+      let minDist = Infinity
+      for (let i = 0; i < totalPages; i++) {
+        const dotEl = dotRefs.current[i]
+        if (!dotEl) continue
+        const r = dotEl.getBoundingClientRect()
+        const center = r.top + r.height / 2
+        const d = Math.abs(clientY - center)
+        if (d < minDist) {
+          minDist = d
+          closestIdx = i
+        }
+      }
+      return closestIdx
+    },
+    [activePageIdx, totalPages],
+  )
+
+  const handleRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const clientY = e.clientY
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    // Open floating menu only when held (~140ms) or dragged
+    holdTimerRef.current = setTimeout(() => {
+      setIsHoldingRail(true)
+      const targetIdx = resolveRailIndexAtClientY(clientY)
+      scrollToPage(targetIdx, 'smooth')
+    }, 140)
+  }
+
+  const handleRailPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
+    if (!isHoldingRail) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current)
+        holdTimerRef.current = null
+      }
+      setIsHoldingRail(true)
     }
+    const targetIdx = resolveRailIndexAtClientY(e.clientY)
+    if (targetIdx !== activePageIdx) {
+      scrollToPage(targetIdx, 'smooth')
+    }
+  }
+
+  const handleRailPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    setIsHoldingRail(false)
   }
 
   const toggleFriendInBill = (friend: CircleName) => {
@@ -399,11 +457,21 @@ export function SplitBillScreen({
     })
   }
 
-  // Standard Login-page consistent input & label classes
+  // Compact & consistent label/input classes matching Login page typography
   const labelTextClass =
-    "font-['Outfit:Regular'] text-[16px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]"
+    "font-['Outfit:Regular'] text-[15px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]"
   const inputBoxClass =
-    "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[14px] font-['Outfit:Regular'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+    "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[12px] font-['Outfit:Regular'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+
+  // Computes the 3D scale/enter transition class for each card in the vertical stack
+  const getCardStackClass = (cardIdx: number) => {
+    const isActive = activePageIdx === cardIdx
+    return `w-full max-w-[392px] rounded-[20px] border bg-white/95 p-[16px] backdrop-blur-[3px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+      isActive
+        ? 'z-10 scale-100 opacity-100 border-[#ececec] shadow-[0_14px_34px_rgba(5,65,49,0.08)]'
+        : 'z-0 scale-[0.88] opacity-45 border-[#ececec]/80 shadow-none'
+    }`
+  }
 
   if (isLoading) {
     return (
@@ -422,11 +490,11 @@ export function SplitBillScreen({
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center select-none"
       >
-        <img src={KLOOP_LOGO} alt="" className="w-[240px] max-w-[62vw] opacity-[0.06] md:w-[290px]" />
+        <img src={KLOOP_LOGO} alt="" className="w-[230px] max-w-[58vw] opacity-[0.06] md:w-[280px]" />
       </div>
 
-      {/* Top Header with White Blur Layer */}
-      <div className="relative z-30 shrink-0 bg-gradient-to-b from-white via-white/95 to-transparent px-[16px] pt-[20px] pb-[12px] backdrop-blur-[2px] md:pt-[28px]">
+      {/* Top Header */}
+      <div className="relative z-30 shrink-0 bg-white px-[16px] pt-[20px] pb-[8px] md:pt-[28px]">
         <header className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
 
@@ -465,7 +533,7 @@ export function SplitBillScreen({
               <div
                 role="dialog"
                 aria-label="Daftar menu"
-                className={`absolute top-[48px] right-0 z-40 flex w-[272px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
+                className={`absolute top-[48px] right-0 z-40 flex w-[268px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
                   menuListClosing
                     ? '[animation:menu-out_180ms_ease-in_forwards]'
                     : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
@@ -531,102 +599,97 @@ export function SplitBillScreen({
         </header>
       </div>
 
-      {/* Main Full-View Paged Scroll Area */}
+      {/* Main Stacked Carousel Viewport */}
       <div className="relative flex-1 min-h-0 w-full">
-        {/* Top Soft White Blur Layer over Scroll Viewport */}
+        {/* Top White Blur Layer covering the peeking previous card */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[28px] bg-gradient-to-b from-white via-white/80 to-transparent backdrop-blur-[1.5px]"
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[76px] bg-gradient-to-b from-white via-white/85 to-transparent backdrop-blur-[2px]"
         />
 
-        {/* Bottom Soft White Blur Layer over Scroll Viewport */}
+        {/* Bottom White Blur Layer covering the peeking next card */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[36px] bg-gradient-to-t from-white via-white/85 to-transparent backdrop-blur-[1.5px]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[76px] bg-gradient-to-t from-white via-white/85 to-transparent backdrop-blur-[2px]"
         />
 
-        {/* Right-Side Vertical Ellipse Progress & Interactive Float Menu */}
+        {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail */}
         <div
           ref={railRef}
-          onMouseEnter={() => setFloatRailExpanded(true)}
-          onMouseLeave={() => setFloatRailExpanded(false)}
-          className="absolute top-1/2 right-[8px] z-30 flex -translate-y-1/2 flex-col items-end gap-[10px] md:right-[16px]"
+          onPointerDown={handleRailPointerDown}
+          onPointerMove={handleRailPointerMove}
+          onPointerUp={handleRailPointerEnd}
+          onPointerCancel={handleRailPointerEnd}
+          className=" absolute top-1/2 right-[6px] z-30 flex -translate-y-1/2 touch-none select-none flex-col items-end gap-[8px] py-[14px] pl-[12px] pr-[4px] md:right-[16px]"
         >
           {pageMetaList.map((meta) => {
             const isActive = activePageIdx === meta.index
-            const showFloatPill = floatRailExpanded || (isActive && activeFloatToastVisible)
+            const distance = Math.abs(activePageIdx - meta.index)
+
+            // Magnetic wave offset while finger is holding and scrubbing along the rail
+            const waveTransform = isActive
+              ? '-translate-x-[12px] scale-[1.06]'
+              : distance === 1
+                ? '-translate-x-[5px] scale-[1.01]'
+                : 'translate-x-0 scale-95 opacity-80'
 
             return (
-              <div key={meta.index} className="relative flex items-center justify-end">
-                {/* Animated Floating Menu Pill per Ellipse */}
-                {showFloatPill && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      scrollToPage(meta.index)
-                      setFloatRailExpanded((prev) => !prev)
-                    }}
-                    style={{ animationDelay: floatRailExpanded ? `${meta.index * 35}ms` : '0ms' }}
-                    className={`mr-[8px] flex max-w-[176px] items-center gap-[6px] rounded-full border px-[10px] py-[5px] text-left shadow-[0_8px_20px_rgba(5,65,49,0.12)] backdrop-blur-md transition [animation:float-pill-in_220ms_cubic-bezier(0.2,0.8,0.2,1)_both] ${
+              <div
+                key={meta.index}
+                ref={(el) => {
+                  dotRefs.current[meta.index] = el
+                }}
+                className="relative flex h-[22px] items-center justify-end"
+              >
+                {/* Floating Pill without inner ellipse — appears ONLY while holding & dragging */}
+                {floatMenuMounted && (
+                  <div
+                    style={{ animationDelay: `${meta.index * 28}ms` }}
+                    className={`pointer-events-none mr-[10px] flex max-w-[180px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-200 ease-out ${waveTransform} ${
+                      floatMenuClosing
+                        ? '[animation:float-pill-out_160ms_ease-in_forwards]'
+                        : '[animation:float-pill-in_240ms_cubic-bezier(0.34,1.56,0.64,1)_both]'
+                    } ${
                       isActive
                         ? 'border-[#a6bb18] bg-[#054131] text-white'
-                        : 'border-[#ececec] bg-white/95 text-[#054131] hover:border-[#a6bb18]'
+                        : 'border-[#ececec] bg-white/95 text-[#054131]'
                     }`}
                   >
-                    <span
-                      className={`size-[6px] shrink-0 rounded-full ${
-                        isActive ? 'bg-[#a6bb18]' : 'bg-[#dedede]'
-                      }`}
-                    />
-                    <span className="truncate font-['Outfit:Medium'] text-[11px] font-medium">
+                    <span className="truncate font-['Outfit:Medium'] text-[12px] font-medium">
                       {meta.shortTitle}
                     </span>
-                  </button>
+                  </div>
                 )}
 
-                {/* Vertical Ellipse Dot */}
-                <button
-                  type="button"
-                  aria-label={meta.shortTitle}
-                  aria-current={isActive ? 'step' : undefined}
-                  onClick={() => {
-                    if (isActive) {
-                      setFloatRailExpanded((e) => !e)
-                    } else {
-                      scrollToPage(meta.index)
-                      setFloatRailExpanded(true)
-                    }
-                  }}
-                  className="group flex items-center justify-center p-[3px]"
-                >
-                  <span
-                    className={`block rounded-full transition-all duration-300 ${
-                      isActive
-                        ? 'h-[24px] w-[8px] bg-[#a6bb18] shadow-[0_0_10px_rgba(166,187,24,0.45)]'
-                        : 'h-[8px] w-[8px] bg-[#dedede] group-hover:bg-[#a6bb18]/60'
-                    }`}
-                  />
-                </button>
+                {/* Right-Side Progress Ellipse */}
+                <span
+                  className={`block rounded-full transition-all duration-300 ${
+                    isActive
+                      ? 'h-[22px] w-[7px] bg-[#a6bb18] shadow-[0_0_8px_rgba(166,187,24,0.45)]'
+                      : 'h-[7px] w-[7px] bg-[#dedede]'
+                  }`}
+                />
               </div>
             )
           })}
         </div>
 
-        {/* Full-Page Scroll Container */}
+        {/* Stacked Vertical Scroll Container (previous & next cards peek above/below under white blur) */}
         <div
           ref={pageScrollRef}
           onScroll={handleViewportScroll}
-          className="snap-page-scroll relative z-10 h-full w-full snap-y snap-mandatory overflow-y-auto scroll-smooth"
+          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[14px] overflow-y-auto px-[16px] pr-[28px] py-[17vh] scroll-smooth"
         >
-          {/* PAGE 0: Nama Tempat & Siapa Aja yang Ikut Patungan */}
+          {/* CARD 0: Nama Tempat, Metode Pembagian, & Teman Patungan */}
           <section
             ref={(el) => {
-              pageRefs.current[0] = el as HTMLDivElement | null
+              pageRefs.current[0] = el
             }}
-            className="flex h-full min-h-full w-full snap-center items-center justify-center px-[16px] pr-[28px] py-[16px]"
+            onClick={() => activePageIdx !== 0 && scrollToPage(0)}
+            className="flex w-full shrink-0 snap-center justify-center"
           >
-            <div className="flex w-full max-w-[480px] flex-col gap-[20px] rounded-[20px] border border-[#ececec] bg-white/92 p-[20px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
-              <label className="flex w-full flex-col gap-[10px]">
+            <div className={`flex flex-col gap-[16px] ${getCardStackClass(0)}`}>
+              <label className="flex w-full flex-col gap-[8px]">
                 <span className={labelTextClass}>Nama Tempat / Tagihan</span>
                 <input
                   value={title}
@@ -636,18 +699,59 @@ export function SplitBillScreen({
                 />
               </label>
 
-              {/* Metode Pembagian */}
-              <div className="flex w-full flex-col gap-[10px]">
+              {/* Metode Pembagian (No outer frame, slimmer height, with icons) */}
+              <div className="flex w-full flex-col gap-[8px]">
                 <span className={labelTextClass}>Metode Pembagian</span>
                 <div
                   role="tablist"
                   aria-label="Metode pembagian tagihan"
-                  className="grid grid-cols-2 gap-[8px] rounded-[12px] border border-[#ececec] bg-[#fefef8] p-[6px]"
+                  className="grid grid-cols-2 gap-[10px]"
                 >
                   {(
                     [
-                      { key: 'per_item', label: 'Per Menu' },
-                      { key: 'equal', label: 'Bagi Rata' },
+                      {
+                        key: 'per_item',
+                        label: 'Per Menu',
+                        icon: (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path
+                              d="M19.5 3.5V20.5L17 19L14.5 20.5L12 19L9.5 20.5L7 19L4.5 20.5V3.5C4.5 2.67157 5.17157 2 6 2H18C18.8284 2 19.5 2.67157 19.5 3.5Z"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M8.5 8H15.5M8.5 12H15.5M8.5 16H12.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        ),
+                      },
+                      {
+                        key: 'equal',
+                        label: 'Bagi Rata',
+                        icon: (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <circle cx="9" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+                            <circle cx="16.5" cy="9.5" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+                            <path
+                              d="M3.5 19.5C3.5 16.4624 5.96243 14 9 14C12.0376 14 14.5 16.4624 14.5 19.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M14.5 14.5C15.1 14.18 15.78 14 16.5 14C18.9853 14 21 16.0147 21 18.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        ),
+                      },
                     ] as const
                   ).map((tab) => {
                     const active = splitMethod === tab.key
@@ -663,32 +767,35 @@ export function SplitBillScreen({
                             setEqualTotalInput(String(itemsSubtotal + taxAmount + serviceAmount - discountAmount))
                           }
                         }}
-                        className={`flex h-[40px] items-center justify-center rounded-[8px] px-[12px] font-['Outfit:Medium'] text-[14px] font-medium transition-colors duration-200 ${
-                          active ? 'bg-[#a6bb18] text-white' : 'bg-transparent text-[#8e8e8e] hover:bg-white'
+                        className={`flex items-center justify-center gap-[7px] rounded-[10px] border py-[8px] px-[12px] font-['Outfit:Medium'] text-[13px] font-medium transition duration-200 active:scale-[0.98] ${
+                          active
+                            ? 'border-[#a6bb18] bg-[#a6bb18] text-white'
+                            : 'border-[#ececec] bg-[#fefef8] text-[#8e8e8e] hover:border-[#a6bb18] hover:text-[#054131]'
                         }`}
                       >
-                        {tab.label}
+                        {tab.icon}
+                        <span>{tab.label}</span>
                       </button>
                     )
                   })}
                 </div>
               </div>
 
-              {/* Siapa Aja yang Ikut Patungan Disini */}
-              <div className="flex w-full flex-col gap-[10px]">
+              {/* Teman Patungan */}
+              <div className="flex w-full flex-col gap-[8px]">
                 <div className="flex items-center justify-between">
                   <span className={labelTextClass}>Teman Patungan ({selectedFriends.length})</span>
                   <button
                     type="button"
                     onClick={() => setSelectedFriends([...availableFriends])}
-                    className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] hover:underline"
+                    className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] hover:underline"
                   >
                     Pilih Semua
                   </button>
                 </div>
                 <div
                   onScroll={onFriendChipScroll}
-                  className={`flex flex-wrap gap-[8px] ${friendChipScrollClass}`}
+                  className={`flex flex-wrap gap-[7px] ${friendChipScrollClass}`}
                 >
                   {availableFriends.map((friend) => {
                     const active = selectedFriends.includes(friend)
@@ -698,14 +805,14 @@ export function SplitBillScreen({
                         type="button"
                         aria-pressed={active}
                         onClick={() => toggleFriendInBill(friend)}
-                        className={`flex max-w-[132px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[6px] transition duration-200 active:scale-95 ${
+                        className={`flex max-w-[120px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-200 active:scale-95 ${
                           active
                             ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
                             : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-70 hover:opacity-100'
                         }`}
                       >
-                        <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
-                        <span className="truncate font-['Outfit:Regular'] text-[14px]">{friend}</span>
+                        <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
+                        <span className="truncate font-['Outfit:Regular'] text-[13px]">{friend}</span>
                       </button>
                     )
                   })}
@@ -714,7 +821,7 @@ export function SplitBillScreen({
             </div>
           </section>
 
-          {/* PAGES 1..N: 1 Menu = 1 Full Page View */}
+          {/* CARDS 1..N: Menu Items */}
           {splitMethod === 'per_item' &&
             items.map((item, idx) => {
               const pageIndex = idx + 1
@@ -722,28 +829,50 @@ export function SplitBillScreen({
                 <section
                   key={item.id}
                   ref={(el) => {
-                    pageRefs.current[pageIndex] = el as HTMLDivElement | null
+                    pageRefs.current[pageIndex] = el
                   }}
-                  className="flex h-full min-h-full w-full snap-center items-center justify-center px-[16px] pr-[28px] py-[16px]"
+                  onClick={() => activePageIdx !== pageIndex && scrollToPage(pageIndex)}
+                  className="flex w-full shrink-0 snap-center justify-center"
                 >
-                  <div className="flex w-full max-w-[480px] flex-col gap-[18px] rounded-[20px] border border-[#ececec] bg-white/92 p-[20px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+                  <div className={`flex flex-col gap-[14px] ${getCardStackClass(pageIndex)}`}>
+                    {/* Menu Index without background frame + Icon-only Delete button */}
                     <div className="flex items-center justify-between gap-[8px]">
-                      <span className="rounded-[8px] bg-[#f2f3e6] px-[10px] py-[4px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18]">
+                      <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18]">
                         Menu {idx + 1} / {items.length}
                       </span>
                       {items.length > 1 && (
                         <button
                           type="button"
+                          aria-label={`Hapus ${item.name}`}
                           onClick={() => requestRemoveItem(item)}
-                          className="rounded-[8px] px-[8px] py-[4px] font-['Outfit:Regular'] text-[14px] text-[#e5484d] transition hover:bg-[#fdf1f1]"
+                          className="flex size-[30px] items-center justify-center rounded-full text-[#e5484d] transition hover:bg-[#fdf1f1] active:scale-95"
                         >
-                          Hapus
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path
+                              d="M19.5 5.5L18.8803 15.5251C18.7219 18.0864 18.6428 19.3671 18.0008 20.2879C17.6833 20.7431 17.2747 21.1273 16.8007 21.416C15.8421 22 14.559 22 11.9927 22C9.42312 22 8.1383 22 7.17905 21.4149C6.7048 21.1257 6.296 20.7408 5.97868 20.2848C5.33688 19.3626 5.25945 18.0801 5.10461 15.5152L4.5 5.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M3 5.5H21M16.0557 5.5L15.3731 4.09173C14.9196 3.15626 14.6928 2.68852 14.3017 2.39681C14.215 2.3321 14.1231 2.27454 14.027 2.2247C13.5939 2 13.0741 2 12.0345 2C10.9688 2 10.436 2 9.99568 2.23412C9.8981 2.28601 9.80498 2.3459 9.71729 2.41317C9.32164 2.7167 9.10063 3.20155 8.65861 4.17126L8.05292 5.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M9.5 16.5V10.5M14.5 16.5V10.5"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                            />
+                          </svg>
                         </button>
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-[16px]">
-                      <label className="flex w-full flex-col gap-[10px]">
+                    <div className="flex flex-col gap-[12px]">
+                      <label className="flex w-full flex-col gap-[8px]">
                         <span className={labelTextClass}>Nama Menu</span>
                         <input
                           value={item.name}
@@ -753,15 +882,15 @@ export function SplitBillScreen({
                         />
                       </label>
 
-                      <div className="grid grid-cols-12 gap-[12px]">
-                        <div className="col-span-5 flex flex-col gap-[10px]">
+                      <div className="grid grid-cols-12 gap-[10px]">
+                        <div className="col-span-5 flex flex-col gap-[8px]">
                           <span className={labelTextClass}>Jumlah</span>
-                          <div className="flex h-[48px] items-center justify-between rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[10px]">
+                          <div className="flex h-[44px] items-center justify-between rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[10px]">
                             <button
                               type="button"
                               aria-label={`Kurangi jumlah ${item.name}`}
                               onClick={() => updateItemQty(item.id, -1)}
-                              className="px-[6px] font-['Outfit:SemiBold'] text-[18px] text-[#054131] hover:text-[#a6bb18]"
+                              className="px-[5px] font-['Outfit:SemiBold'] text-[17px] text-[#054131] hover:text-[#a6bb18]"
                             >
                               −
                             </button>
@@ -772,14 +901,14 @@ export function SplitBillScreen({
                               type="button"
                               aria-label={`Tambah jumlah ${item.name}`}
                               onClick={() => updateItemQty(item.id, 1)}
-                              className="px-[6px] font-['Outfit:SemiBold'] text-[18px] text-[#054131] hover:text-[#a6bb18]"
+                              className="px-[5px] font-['Outfit:SemiBold'] text-[17px] text-[#054131] hover:text-[#a6bb18]"
                             >
                               +
                             </button>
                           </div>
                         </div>
 
-                        <label className="col-span-7 flex flex-col gap-[10px]">
+                        <label className="col-span-7 flex flex-col gap-[8px]">
                           <span className={labelTextClass}>Harga (Rp)</span>
                           <input
                             inputMode="numeric"
@@ -799,7 +928,7 @@ export function SplitBillScreen({
                     </div>
 
                     {/* Pilih Avatar Teman untuk Menu Ini */}
-                    <div className="flex flex-col gap-[10px]">
+                    <div className="flex flex-col gap-[8px]">
                       <div className="flex items-center justify-between">
                         <span className={labelTextClass}>
                           Dibagi ke ({item.assignedParticipantIds.length})
@@ -807,12 +936,12 @@ export function SplitBillScreen({
                         <button
                           type="button"
                           onClick={() => assignAllToItem(item.id)}
-                          className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] hover:underline"
+                          className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] hover:underline"
                         >
                           Pilih Semua
                         </button>
                       </div>
-                      <div className="flex flex-wrap items-center gap-[8px]">
+                      <div className="flex flex-wrap items-center gap-[7px]">
                         {selectedFriends.map((friend) => {
                           const assigned = item.assignedParticipantIds.includes(friend)
                           return (
@@ -821,14 +950,14 @@ export function SplitBillScreen({
                               type="button"
                               aria-pressed={assigned}
                               onClick={() => toggleFriendOnItem(item.id, friend)}
-                              className={`flex max-w-[132px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[6px] transition duration-150 active:scale-95 ${
+                              className={`flex max-w-[120px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-150 active:scale-95 ${
                                 assigned
                                   ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
                                   : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-65 hover:opacity-100'
                               }`}
                             >
-                              <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
-                              <span className="truncate font-['Outfit:Regular'] text-[14px]">{friend}</span>
+                              <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
+                              <span className="truncate font-['Outfit:Regular'] text-[13px]">{friend}</span>
                             </button>
                           )
                         })}
@@ -839,55 +968,56 @@ export function SplitBillScreen({
               )
             })}
 
-          {/* FINAL PAGE: Pajak, Tambah Menu Baru & Ringkasan Pembagian */}
+          {/* FINAL CARD: Pajak, Tambah Menu Baru & Ringkasan Pembagian */}
           <section
             ref={(el) => {
-              pageRefs.current[totalPages - 1] = el as HTMLDivElement | null
+              pageRefs.current[totalPages - 1] = el
             }}
-            className="flex h-full min-h-full w-full snap-center items-center justify-center px-[16px] pr-[28px] py-[16px]"
+            onClick={() => activePageIdx !== totalPages - 1 && scrollToPage(totalPages - 1)}
+            className="flex w-full shrink-0 snap-center justify-center"
           >
-            <div className="flex w-full max-w-[480px] flex-col gap-[16px] rounded-[20px] border border-[#ececec] bg-white/92 p-[20px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+            <div className={`flex flex-col gap-[14px] ${getCardStackClass(totalPages - 1)}`}>
               {splitMethod === 'per_item' ? (
                 <>
                   {/* Form Tambah Menu Baru */}
                   <form
                     onSubmit={handleAddItem}
-                    className="flex flex-col gap-[10px] rounded-[12px] border border-dashed border-[#dedede] bg-[#fefef8] p-[12px]"
+                    className="flex flex-col gap-[8px] rounded-[12px] border border-dashed border-[#dedede] bg-[#fefef8] p-[10px]"
                   >
                     <span className={labelTextClass}>Tambah Menu Lainnya</span>
-                    <div className="grid grid-cols-12 gap-[8px]">
+                    <div className="grid grid-cols-12 gap-[6px]">
                       <input
                         value={newItemName}
                         onChange={(e) => setNewItemName(e.target.value)}
                         placeholder="Nama menu"
-                        className="col-span-6 rounded-[12px] border border-[#ececec] bg-white px-[10px] py-[12px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                        className="col-span-6 rounded-[10px] border border-[#ececec] bg-white px-[10px] py-[10px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
                       />
                       <input
                         value={newItemQty}
                         onChange={(e) => setNewItemQty(e.target.value)}
                         inputMode="numeric"
                         placeholder="Qty"
-                        className="col-span-2 rounded-[12px] border border-[#ececec] bg-white px-[8px] py-[12px] text-center font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                        className="col-span-2 rounded-[10px] border border-[#ececec] bg-white px-[6px] py-[10px] text-center font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
                       />
                       <input
                         value={newItemPrice}
                         onChange={(e) => setNewItemPrice(e.target.value)}
                         inputMode="numeric"
                         placeholder="Harga"
-                        className="col-span-4 rounded-[12px] border border-[#ececec] bg-white px-[10px] py-[12px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                        className="col-span-4 rounded-[10px] border border-[#ececec] bg-white px-[10px] py-[10px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
                       />
                     </div>
                     <button
                       type="submit"
-                      className="self-end rounded-[10px] bg-[#f2f3e6] px-[14px] py-[8px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
+                      className="self-end rounded-[8px] bg-[#f2f3e6] px-[12px] py-[6px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
                     >
                       + Tambah Menu
                     </button>
                   </form>
 
                   {/* Pajak & Service */}
-                  <div className="grid grid-cols-2 gap-[12px]">
-                    <label className="flex flex-col gap-[8px]">
+                  <div className="grid grid-cols-2 gap-[10px]">
+                    <label className="flex flex-col gap-[6px]">
                       <span className={labelTextClass}>Pajak / PPN</span>
                       <input
                         inputMode="numeric"
@@ -897,7 +1027,7 @@ export function SplitBillScreen({
                         className={inputBoxClass}
                       />
                     </label>
-                    <label className="flex flex-col gap-[8px]">
+                    <label className="flex flex-col gap-[6px]">
                       <span className={labelTextClass}>Service Charge</span>
                       <input
                         inputMode="numeric"
@@ -910,7 +1040,7 @@ export function SplitBillScreen({
                   </div>
                 </>
               ) : (
-                <label className="flex flex-col gap-[10px]">
+                <label className="flex flex-col gap-[8px]">
                   <span className={labelTextClass}>Total Tagihan Bersama (Rp)</span>
                   <input
                     inputMode="numeric"
@@ -923,26 +1053,26 @@ export function SplitBillScreen({
               )}
 
               {/* Ringkasan per Teman */}
-              <div className="flex flex-col gap-[10px] border-t border-[#ececec] pt-[12px]">
+              <div className="flex flex-col gap-[8px] border-t border-[#ececec] pt-[10px]">
                 <div className="flex items-center justify-between">
                   <span className={labelTextClass}>Total Tagihan</span>
-                  <span className="font-['Outfit:SemiBold'] text-[18px] font-semibold tabular-nums text-[#054131]">
+                  <span className="font-['Outfit:SemiBold'] text-[17px] font-semibold tabular-nums text-[#054131]">
                     {formatRupiah(grandTotal)}
                   </span>
                 </div>
-                <div className="grid max-h-[116px] grid-cols-2 gap-[8px] overflow-y-auto pr-[2px]">
+                <div className="grid max-h-[104px] grid-cols-2 gap-[6px] overflow-y-auto pr-[2px]">
                   {participantShares.map((p) => (
                     <div
                       key={p.name}
-                      className="flex items-center justify-between gap-[6px] rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px]"
+                      className="flex items-center justify-between gap-[6px] rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[9px] py-[6px]"
                     >
                       <div className="flex min-w-0 items-center gap-[6px]">
-                        <span className="relative block size-[20px] shrink-0">
+                        <span className="relative block size-[18px] shrink-0">
                           <Img src={p.avatarUrl} skeleton="rounded-full" />
                         </span>
-                        <span className="truncate font-['Outfit:Regular'] text-[14px] text-[#054131]">{p.name}</span>
+                        <span className="truncate font-['Outfit:Regular'] text-[13px] text-[#054131]">{p.name}</span>
                       </div>
-                      <span className="shrink-0 font-['Outfit:Medium'] text-[14px] font-medium tabular-nums text-[#a6bb18]">
+                      <span className="shrink-0 font-['Outfit:Medium'] text-[13px] font-medium tabular-nums text-[#a6bb18]">
                         {formatRupiah(p.totalOwed)}
                       </span>
                     </div>

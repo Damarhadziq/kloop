@@ -1,6 +1,6 @@
-# KLOOP (figma-make-app)
+# KLOOP
 
-Mobile-first Split Bill & Expense Tracking web application built with **React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4** (exported from Figma Make and refactored into a modular Feature-First architecture).
+Mobile-first Split Bill & Expense Tracking web application built with **React 19 + Vite 8 + TypeScript 5.7 + Tailwind CSS v4** (modular Feature-First architecture).
 
 ## Development Server
 
