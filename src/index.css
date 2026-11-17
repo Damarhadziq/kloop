@@ -30,7 +30,11 @@
 }
 
 @layer base {
+  :root {
+    color-scheme: light only;
+  }
   html {
+    color-scheme: light only;
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
     background: #ffffff;

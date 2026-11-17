@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kloop-pwa-v4'
+const CACHE_NAME = 'kloop-pwa-v5'
 
 self.addEventListener('install', () => {
   self.skipWaiting()

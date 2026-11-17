@@ -33,7 +33,7 @@ export const HOME_IMAGES = {
   verified: a('41abe.svg'),
   bellSmall: a('5a751.svg'),
   usersGroup: a('a81da.svg'),
-  stack: [a('42990.png'), a('e083e.png'), a('016c5.png'), a('f1afc.png')],
+  stack: [a('5828b.svg'), a('050f8.svg'), a('2172f.svg'), a('79c9b.svg')],
 } as const
 
 export const CIRCLE_AVATARS = {
