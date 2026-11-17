@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kloop-pwa-v1'
+const CACHE_NAME = 'kloop-pwa-v2'
 const PRECACHE_URLS = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

@@ -6,6 +6,8 @@ import {
   analyzeReceiptImage,
   autoCropUploadedReceiptImage,
   captureAndAutoCropVideo,
+  detectReceiptBoundsInVideoFrame,
+  type LiveReceiptBounds,
 } from '@/services/scanner.service'
 import type { ReceiptQualityMetrics, ReceiptScanAnalysisResult, ReceiptValidationIssue } from '@/types'
 import { ReceiptValidationModal } from './ReceiptValidationModal'
@@ -52,6 +54,14 @@ export function ScanScreen({
 
   const [camera, setCamera] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [torch, setTorch] = useState(false)
+  const [liveBounds, setLiveBounds] = useState<LiveReceiptBounds>({
+    detected: false,
+    leftPct: 12,
+    topPct: 8,
+    widthPct: 76,
+    heightPct: 74,
+  })
+  const [filteredPreviewUrl, setFilteredPreviewUrl] = useState<string | null>(null)
 
   // Validation pop-up state when receipt is unreadable/invalid
   const [validationPopup, setValidationPopup] = useState<{
@@ -92,7 +102,6 @@ export function ScanScreen({
           return
         }
 
-        // Check if current rear lens supports torch; if not, try finding the main rear camera that has torch
         const initialTrack = stream.getVideoTracks()[0]
         const initialCaps = initialTrack?.getCapabilities?.() as TorchCapabilities | undefined
         if (!initialCaps?.torch && navigator.mediaDevices.enumerateDevices) {
@@ -159,6 +168,18 @@ export function ScanScreen({
     }
   }, [iconsReady, camera])
 
+  // Real-time auto-fit bounding box detection on live camera stream
+  useEffect(() => {
+    if (camera !== 'ready' || validationPopup.open || filteredPreviewUrl) return
+    const timer = setInterval(() => {
+      const video = videoRef.current
+      if (!video || video.readyState < 2) return
+      const nextBounds = detectReceiptBoundsInVideoFrame(video)
+      setLiveBounds(nextBounds)
+    }, 260)
+    return () => clearInterval(timer)
+  }, [camera, validationPopup.open, filteredPreviewUrl])
+
   const toggleTorch = useCallback(
     async (forceOn?: boolean) => {
       const nextTorch = typeof forceOn === 'boolean' ? forceOn : !torch
@@ -179,7 +200,6 @@ export function ScanScreen({
         notify(nextTorch ? 'Senter HP dinyalakan' : 'Senter HP dimatikan')
         return
       } catch {
-        // Fallback: direct constraint object for browsers that don't use `advanced`
         try {
           await track.applyConstraints({ torch: nextTorch } as unknown as MediaTrackConstraints)
           setTorch(nextTorch)
@@ -198,25 +218,30 @@ export function ScanScreen({
   )
 
   const validateAndProceed = useCallback(
-    async (fullScreenReceiptUrl: string) => {
-      const analysis = await analyzeReceiptImage(fullScreenReceiptUrl, {
-        category: categoryTitle,
-        participantIds,
-        preset: 'auto',
-      })
+    async (fullScreenEnhancedReceiptUrl: string) => {
+      setFilteredPreviewUrl(fullScreenEnhancedReceiptUrl)
+      const [analysis] = await Promise.all([
+        analyzeReceiptImage(fullScreenEnhancedReceiptUrl, {
+          category: categoryTitle,
+          participantIds,
+          preset: 'auto',
+        }),
+        new Promise((r) => setTimeout(r, 420)),
+      ])
+      setFilteredPreviewUrl(null)
 
       if (!analysis.valid && analysis.issue) {
         setValidationPopup({
           open: true,
           issue: analysis.issue,
           metrics: analysis.metrics,
-          image: fullScreenReceiptUrl,
+          image: fullScreenEnhancedReceiptUrl,
           lastResult: analysis,
         })
         return
       }
 
-      onCaptured(fullScreenReceiptUrl, analysis)
+      onCaptured(fullScreenEnhancedReceiptUrl, analysis)
     },
     [categoryTitle, onCaptured, participantIds],
   )
@@ -228,9 +253,9 @@ export function ScanScreen({
     const vfWidth = rect?.width || 360
     const vfHeight = rect?.height || 540
 
-    // Automatically crop to the viewfinder & receipt paper bounds and scale to full-screen
-    const croppedReceiptDataUrl = captureAndAutoCropVideo(video, vfWidth, vfHeight)
-    void validateAndProceed(croppedReceiptDataUrl)
+    // Auto-crop to receipt bounds + apply high-contrast OCR accuracy filter
+    const enhancedFullScreenUrl = captureAndAutoCropVideo(video, vfWidth, vfHeight)
+    void validateAndProceed(enhancedFullScreenUrl)
   }
 
   return (
@@ -291,19 +316,56 @@ export function ScanScreen({
               playsInline
               muted
               className={`absolute inset-0 size-full object-cover transition-opacity duration-300 ${
-                camera === 'ready' ? 'opacity-100' : 'opacity-0'
+                camera === 'ready' && !filteredPreviewUrl ? 'opacity-100' : 'opacity-0'
               }`}
             />
-            {camera === 'ready' && (
-              <button
-                type="button"
-                aria-label="Ambil foto struk"
-                onClick={capture}
-                className="absolute bottom-[20px] left-1/2 flex size-[64px] -translate-x-1/2 items-center justify-center rounded-full border-[3px] border-white/90 transition active:scale-95"
-              >
-                <span className="size-[50px] rounded-full bg-white transition hover:bg-[#f8f8ec]" />
-              </button>
+
+            {/* Enhanced high-contrast full-screen receipt preview right after capture */}
+            {filteredPreviewUrl && (
+              <div className="absolute inset-0 z-20 overflow-hidden bg-white">
+                <img
+                  src={filteredPreviewUrl}
+                  alt="Hasil filter akurasi struk"
+                  className="size-full object-cover contrast-125 grayscale-[35%]"
+                />
+                <div className="absolute top-[14px] left-1/2 -translate-x-1/2 rounded-full bg-[#054131]/85 px-[12px] py-[4px] font-['Outfit:Medium'] text-[11px] text-white backdrop-blur-xs">
+                  ✓ Filter Ketajaman Struk Diterapkan
+                </div>
+              </div>
             )}
+
+            {camera === 'ready' && !filteredPreviewUrl && (
+              <>
+                {/* Auto-Fit Bounding Box that dynamically fits around the detected receipt */}
+                <div
+                  aria-hidden
+                  style={{
+                    left: `${liveBounds.leftPct}%`,
+                    top: `${liveBounds.topPct}%`,
+                    width: `${liveBounds.widthPct}%`,
+                    height: `${liveBounds.heightPct}%`,
+                  }}
+                  className={`pointer-events-none absolute rounded-[14px] border-[2px] shadow-[0_0_0_9999px_rgba(5,65,49,0.22)] transition-all duration-300 ease-out ${
+                    liveBounds.detected ? 'border-[#a6bb18]' : 'border-white/75'
+                  }`}
+                >
+                  <span className="absolute -top-[2px] -left-[2px] size-[18px] rounded-tl-[12px] border-t-[3.5px] border-l-[3.5px] border-[#a6bb18]" />
+                  <span className="absolute -top-[2px] -right-[2px] size-[18px] rounded-tr-[12px] border-t-[3.5px] border-r-[3.5px] border-[#a6bb18]" />
+                  <span className="absolute -bottom-[2px] -left-[2px] size-[18px] rounded-bl-[12px] border-b-[3.5px] border-l-[3.5px] border-[#a6bb18]" />
+                  <span className="absolute -bottom-[2px] -right-[2px] size-[18px] rounded-br-[12px] border-b-[3.5px] border-r-[3.5px] border-[#a6bb18]" />
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Ambil foto struk"
+                  onClick={capture}
+                  className="absolute bottom-[20px] left-1/2 z-10 flex size-[64px] -translate-x-1/2 items-center justify-center rounded-full border-[3px] border-white/90 transition active:scale-95"
+                >
+                  <span className="size-[50px] rounded-full bg-white transition hover:bg-[#f8f8ec]" />
+                </button>
+              </>
+            )}
+
             {camera === 'unavailable' && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] p-[24px] text-center">
                 <p className="font-['Outfit:Regular'] text-[14px] text-[#054131]">Kamera tidak bisa diakses.</p>

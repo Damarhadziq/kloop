@@ -17,7 +17,20 @@ export function ActiveBillCard({
 }) {
   const paidCount = bill.participants.filter((p) => p.paid).length
   return (
-    <div className="flex w-full flex-col gap-[12px] rounded-[10px] border border-[#ececec] bg-white p-[12px] [animation:fade-up_360ms_cubic-bezier(0.2,0.8,0.2,1)_both]">
+    <div
+      onClick={() => onOpenDetail?.(bill)}
+      role={onOpenDetail ? 'button' : undefined}
+      tabIndex={onOpenDetail ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onOpenDetail && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onOpenDetail(bill)
+        }
+      }}
+      className={`flex w-full flex-col gap-[12px] rounded-[12px] border border-[#ececec] bg-white p-[12px] transition duration-200 [animation:fade-up_360ms_cubic-bezier(0.2,0.8,0.2,1)_both] ${
+        onOpenDetail ? 'cursor-pointer hover:border-[#a6bb18] hover:shadow-[0_6px_20px_rgba(5,65,49,0.06)] active:scale-[0.99]' : ''
+      }`}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center justify-center gap-[4px]">
           <Icon src={HOME_IMAGES.chefHat} size={18} />
@@ -29,22 +42,9 @@ export function ActiveBillCard({
           {bill.time}
         </p>
       </div>
-      <div
-        onClick={() => onOpenDetail?.(bill)}
-        role={onOpenDetail ? 'button' : undefined}
-        tabIndex={onOpenDetail ? 0 : undefined}
-        onKeyDown={(e) => {
-          if (onOpenDetail && (e.key === 'Enter' || e.key === ' ')) {
-            e.preventDefault()
-            onOpenDetail(bill)
-          }
-        }}
-        className={`flex items-center justify-between gap-2 font-['Outfit:Medium'] leading-[normal] font-medium tracking-[-0.2px] ${
-          onOpenDetail ? 'cursor-pointer rounded-[6px] transition hover:opacity-80' : ''
-        }`}
-      >
-        <p className="truncate text-[16px]">{bill.title}</p>
-        <p className="shrink-0 text-[20px]">{formatRupiah(bill.total)}</p>
+      <div className="flex items-center justify-between gap-2 font-['Outfit:Medium'] leading-[normal] font-medium tracking-[-0.2px]">
+        <p className="truncate text-[16px] text-[#054131]">{bill.title}</p>
+        <p className="shrink-0 text-[20px] tabular-nums text-[#054131]">{formatRupiah(bill.total)}</p>
       </div>
       <div className="relative h-0 w-full">
         <div className="absolute inset-[-2px_0_0_0]">
@@ -58,15 +58,6 @@ export function ActiveBillCard({
               ? 'Semua sudah lunas'
               : `${paidCount} dari ${bill.participants.length} sudah lunas`}
           </p>
-          {onOpenDetail && (
-            <button
-              type="button"
-              onClick={() => onOpenDetail(bill)}
-              className="font-['Outfit:Regular'] text-[12px] leading-[normal] font-normal text-[#8e8e8e] transition hover:text-[#a6bb18]"
-            >
-              Rincian →
-            </button>
-          )}
         </div>
         <div className="grid grid-cols-3 gap-[12px]">
           {bill.participants.map((p) => {
@@ -74,7 +65,11 @@ export function ActiveBillCard({
             return (
               <div key={p.name} className="flex min-w-0 items-center gap-[6px]">
                 <button
-                  onClick={() => onTogglePaid(bill.id, p.name)}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePaid(bill.id, p.name)
+                  }}
                   title={p.paid ? 'Tandai belum lunas' : 'Tandai lunas'}
                   className="flex min-w-0 items-center gap-[6px] rounded-[4px] hover:opacity-80"
                 >
@@ -95,8 +90,12 @@ export function ActiveBillCard({
                   </span>
                 ) : (
                   <button
+                    type="button"
                     aria-label={`Ingatkan ${p.name}`}
-                    onClick={() => onRemind(bill.id, p.name)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRemind(bill.id, p.name)
+                    }}
                     className={`flex shrink-0 items-center rounded-[6px] p-[4px] transition ${
                       reminded[key] ? 'bg-[#a6bb18]/25' : 'bg-[#f2f3e6] hover:bg-[#e8ead2]'
                     }`}
@@ -112,4 +111,3 @@ export function ActiveBillCard({
     </div>
   )
 }
-

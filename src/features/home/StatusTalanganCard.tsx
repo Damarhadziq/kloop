@@ -33,7 +33,7 @@ export function StatusTalanganCard({
         <div className="flex w-full flex-col gap-[14px]">
           <div className="flex w-full items-center justify-between gap-2">
             <div className="flex items-center gap-[4px]">
-              <Icon src={HOME_IMAGES.cashOut} size={18} />
+              <Icon src={isMasuk ? HOME_IMAGES.perluDitagih : HOME_IMAGES.kamuDitagih} size={18} />
               <p
                 key={tab}
                 className="font-['Outfit:Regular'] text-[14px] leading-[normal] font-normal whitespace-nowrap text-[#054131] [animation:fade-up_260ms_ease-out]"
@@ -86,21 +86,21 @@ export function StatusTalanganCard({
               </p>
               <div
                 key={`${tab}-${tagihanPaid}`}
-                className="flex h-[24px] min-w-0 items-center gap-[6px] [animation:fade-up_260ms_ease-out]"
+                className="flex h-[18px] min-w-0 items-center gap-[5px] [animation:fade-up_260ms_ease-out]"
               >
                 {isMasuk && (
                   <div className="flex shrink-0 items-center">
                     {HOME_IMAGES.stack.map((s, i, arr) => (
                       <span
                         key={s}
-                        className={`relative block size-[24px] shrink-0 ${i < arr.length - 1 ? 'mr-[-12px]' : ''}`}
+                        className={`relative block size-[18px] shrink-0 ${i < arr.length - 1 ? 'mr-[-8px]' : ''}`}
                       >
-                        <Img src={s} skeleton="rounded-full ring-2 ring-white" />
+                        <Img src={s} skeleton="rounded-full ring-1 ring-white" />
                       </span>
                     ))}
                   </div>
                 )}
-                <p className="truncate font-['Outfit:Regular'] text-[14px] leading-[normal] font-normal text-[#8e8e8e]">
+                <p className="truncate font-['Outfit:Regular'] text-[11px] leading-[15px] font-normal text-[#8e8e8e]">
                   {isMasuk ? talangan.masuk.note : tagihanPaid ? 'Semua tagihan sudah lunas' : talangan.tagihan.note}
                 </p>
               </div>

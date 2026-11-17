@@ -22,7 +22,8 @@ export const formatRupiah = (n: number) => `Rp ${Math.round(n).toLocaleString('i
 export const HOME_IMAGES = {
   profile: a('99968.svg'),
   billList: a('fabc8.svg'),
-  cashOut: a('3c9ae.svg'),
+  perluDitagih: a('perlu-ditagih.svg'),
+  kamuDitagih: a('kamu-ditagih.svg'),
   bell: a('5b4e9.svg'),
   illustration: a('470ea.svg'),
   docAdd: a('cd915.svg'),

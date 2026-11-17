@@ -73,7 +73,7 @@ function HeroTalanganPreview({ mode }: { mode: 'masuk' | 'tagihan' }) {
     <div className="pointer-events-none flex size-full flex-col justify-between rounded-[12px] border border-[#ececec] bg-white p-[12px] text-[#054131] select-none">
       <div className="flex w-full items-center justify-between gap-2">
         <div className="flex items-center gap-[4px]">
-          <Icon src={HOME_IMAGES.cashOut} size={18} />
+          <Icon src={isMasuk ? HOME_IMAGES.perluDitagih : HOME_IMAGES.kamuDitagih} size={18} />
           <p className="font-['Outfit:Regular'] text-[14px] leading-[normal] font-normal whitespace-nowrap text-[#054131]">
             {isMasuk ? 'Perlu Ditagih' : 'Kamu Ditagih'}
           </p>

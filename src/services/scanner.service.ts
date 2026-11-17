@@ -413,6 +413,181 @@ export function generateSimulatedReceiptImage(preset: Exclude<ScanSimulationPres
   return canvas.toDataURL('image/jpeg', 0.85)
 }
 
+export interface LiveReceiptBounds {
+  detected: boolean
+  leftPct: number
+  topPct: number
+  widthPct: number
+  heightPct: number
+}
+
+/**
+ * Detects the receipt paper bounding box in real-time from a live `<video>` element
+ * so the on-screen viewfinder frame can auto-fit around the receipt.
+ */
+export function detectReceiptBoundsInVideoFrame(video: HTMLVideoElement): LiveReceiptBounds {
+  const defaultBounds: LiveReceiptBounds = {
+    detected: false,
+    leftPct: 12,
+    topPct: 8,
+    widthPct: 76,
+    heightPct: 74,
+  }
+  if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    return defaultBounds
+  }
+
+  const sw = 120
+  const sh = 160
+  const canvas = document.createElement('canvas')
+  canvas.width = sw
+  canvas.height = sh
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return defaultBounds
+
+  ctx.drawImage(video, 0, 0, sw, sh)
+  const { data } = ctx.getImageData(0, 0, sw, sh)
+
+  let lumSum = 0
+  let maxLum = 0
+  const total = sw * sh
+  const lums = new Uint8Array(total)
+
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const l = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2])
+    lums[p] = l
+    lumSum += l
+    if (l > maxLum) maxLum = l
+  }
+
+  const meanLum = lumSum / total
+  if (meanLum < 22 || maxLum - meanLum < 18) {
+    return defaultBounds
+  }
+
+  const threshold = Math.min(220, Math.max(meanLum * 1.1, meanLum + (maxLum - meanLum) * 0.32))
+  let minX = sw
+  let maxX = 0
+  let minY = sh
+  let maxY = 0
+  let count = 0
+
+  const padX = Math.round(sw * 0.05)
+  const padY = Math.round(sh * 0.05)
+
+  for (let y = padY; y < sh - padY; y++) {
+    let rowCount = 0
+    for (let x = padX; x < sw - padX; x++) {
+      if (lums[y * sw + x] >= threshold) rowCount++
+    }
+    if (rowCount >= sw * 0.18 && rowCount <= sw * 0.9) {
+      for (let x = padX; x < sw - padX; x++) {
+        if (lums[y * sw + x] >= threshold) {
+          if (x < minX) minX = x
+          if (x > maxX) maxX = x
+          if (y < minY) minY = y
+          if (y > maxY) maxY = y
+          count++
+        }
+      }
+    }
+  }
+
+  const bw = maxX - minX
+  const bh = maxY - minY
+  if (count < total * 0.06 || bw < sw * 0.25 || bh < sh * 0.28) {
+    return defaultBounds
+  }
+
+  const leftPct = Math.round(Math.max(6, Math.min(26, (minX / sw) * 100 - 2)))
+  const topPct = Math.round(Math.max(5, Math.min(22, (minY / sh) * 100 - 2)))
+  const widthPct = Math.round(Math.max(48, Math.min(100 - leftPct - 6, (bw / sw) * 100 + 4)))
+  const heightPct = Math.round(Math.max(50, Math.min(84 - topPct, (bh / sh) * 100 + 4)))
+
+  return {
+    detected: true,
+    leftPct,
+    topPct,
+    widthPct,
+    heightPct,
+  }
+}
+
+/**
+ * Applies an OCR accuracy enhancement filter (Adaptive Contrast Stretch,
+ * Paper Background Normalization, and Unsharp Mask Edge Sharpening) to a receipt canvas.
+ */
+function applyReceiptOcrEnhancementFilter(canvas: HTMLCanvasElement): void {
+  const w = canvas.width
+  const h = canvas.height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx || w < 16 || h < 16) return
+
+  const imgData = ctx.getImageData(0, 0, w, h)
+  const src = imgData.data
+  const total = w * h
+  const gray = new Float32Array(total)
+
+  // Step 1: Compute luminance and histogram percentiles (p5 dark ink, p88 paper white)
+  const hist = new Uint32Array(256)
+  for (let i = 0, p = 0; i < src.length; i += 4, p++) {
+    const lum = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]
+    gray[p] = lum
+    hist[Math.min(255, Math.max(0, Math.round(lum)))]++
+  }
+
+  let acc = 0
+  let lowCut = 25
+  let highCut = 230
+  for (let v = 0; v < 256; v++) {
+    acc += hist[v]
+    if (acc <= total * 0.05) lowCut = v
+    if (acc <= total * 0.88) highCut = v
+  }
+
+  const range = Math.max(40, highCut - lowCut)
+
+  // Step 2: 3x3 Unsharp Mask + Adaptive S-Curve Document Contrast
+  const enhanced = new Uint8ClampedArray(total)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x
+      const center = gray[idx]
+
+      // 3x3 sharpening kernel on interior pixels
+      let sharp = center
+      if (y > 0 && y < h - 1 && x > 0 && x < w - 1) {
+        const neighbors =
+          (gray[idx - 1] + gray[idx + 1] + gray[idx - w] + gray[idx + w]) * 0.25
+        sharp = center + (center - neighbors) * 1.35
+      }
+
+      // Normalize to [0, 1]
+      const norm = Math.min(1, Math.max(0, (sharp - lowCut) / range))
+      // Crisp document S-curve: whiten paper above 0.72, darken text ink below 0.42
+      const curved =
+        norm > 0.72
+          ? 0.88 + ((norm - 0.72) / 0.28) * 0.12
+          : norm < 0.38
+            ? Math.pow(norm / 0.38, 1.55) * 0.32
+            : 0.32 + ((norm - 0.38) / 0.34) * 0.56
+
+      enhanced[idx] = Math.round(curved * 255)
+    }
+  }
+
+  // Write clean high-contrast warm-paper document output back to canvas
+  for (let i = 0, p = 0; i < src.length; i += 4, p++) {
+    const v = enhanced[p]
+    // Subtle warm paper tint on bright pixels, pure crisp dark green-black on ink
+    src[i] = v
+    src[i + 1] = Math.min(255, Math.round(v * 1.005))
+    src[i + 2] = Math.max(0, Math.round(v * 0.985))
+  }
+
+  ctx.putImageData(imgData, 0, 0)
+}
+
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -515,7 +690,10 @@ function autoCropCanvasToReceiptFullScreen(sourceCanvas: HTMLCanvasElement): str
     outCtx.drawImage(sourceCanvas, 0, 0, sw, sh, 0, 0, outW, outH)
   }
 
-  return outCanvas.toDataURL('image/jpeg', 0.9)
+  // Apply automatic OCR accuracy enhancement filter (contrast stretch + sharpening)
+  applyReceiptOcrEnhancementFilter(outCanvas)
+
+  return outCanvas.toDataURL('image/jpeg', 0.92)
 }
 
 /**
