@@ -115,6 +115,41 @@
   .stagger > *:nth-child(4) { animation-delay: 270ms; }
   .stagger > *:nth-child(5) { animation-delay: 340ms; }
   .stagger > *:nth-child(n + 6) { animation-delay: 400ms; }
+
+  /* Horizontal chip scroll: scrollbar is completely hidden initially, shown only while actively scrolling */
+  .chip-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .chip-scroll::-webkit-scrollbar {
+    display: none;
+    height: 0;
+    width: 0;
+  }
+  .chip-scroll.is-scrolling {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(166, 187, 24, 0.55) transparent;
+  }
+  .chip-scroll.is-scrolling::-webkit-scrollbar {
+    display: block;
+    height: 4px;
+  }
+  .chip-scroll.is-scrolling::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .chip-scroll.is-scrolling::-webkit-scrollbar-thumb {
+    background: rgba(166, 187, 24, 0.55);
+    border-radius: 999px;
+  }
+
+  /* Hide scrollbar on full-page snap container while keeping smooth snap scrolling */
+  .snap-page-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .snap-page-scroll::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @keyframes toast-in {

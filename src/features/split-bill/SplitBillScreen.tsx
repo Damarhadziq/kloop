@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ScanResultSkeleton, useSimulatedLoading } from '@/components/skeletons'
-import { Badge, ConfirmModal, Icon, Img, usePresence } from '@/components/ui'
+import { Badge, ConfirmModal, Icon, Img, KLOOP_LOGO, usePresence, useScrollBarOnScroll } from '@/components/ui'
 import {
   CIRCLE_AVATARS,
   HOME_IMAGES,
@@ -33,14 +33,14 @@ export function SplitBillScreen({
   notify: (msg: string) => void
 }) {
   const splitScreenAssets = useMemo(
-    () => [...Object.values(CIRCLE_AVATARS), ...Object.values(SCAN_ICONS), HOME_IMAGES.dashedLine],
+    () => [...Object.values(CIRCLE_AVATARS), ...Object.values(SCAN_ICONS), HOME_IMAGES.dashedLine, KLOOP_LOGO],
     [],
   )
   const { isLoading } = useSimulatedLoading(true, 650, splitScreenAssets)
 
   const defaultMethod: SplitMethod = jenis.id === 'flat' ? 'equal' : 'per_item'
   const [splitMethod, setSplitMethod] = useState<SplitMethod>(defaultMethod)
-  const [title, setTitle] = useState(initialTitle || (fromScan ? 'Kopi Nako Tembalang' : 'Kopi Nako Tembalang'))
+  const [title, setTitle] = useState(initialTitle || 'Kopi Nako Tembalang')
 
   const availableFriends = useMemo<CircleName[]>(
     () => (circle.length > 0 ? circle : (Object.keys(CIRCLE_AVATARS) as CircleName[]).slice(0, 4)),
@@ -58,15 +58,19 @@ export function SplitBillScreen({
   const [newItemPrice, setNewItemPrice] = useState('')
   const [newItemQty, setNewItemQty] = useState('1')
 
-  // Per-menu paged scroll state & Top-Right Menu List Popover state
-  const [activeMenuIdx, setActiveMenuIdx] = useState(0)
+  // Full-page view index:
+  // Page 0 = Nama Tempat & Siapa Aja yang Ikut Patungan
+  // Page 1..items.length = Menu 1..N (or Bagi Rata card if splitMethod === 'equal')
+  // Last Page = Pajak, Tambah Menu & Ringkasan Pembagian
+  const [activePageIdx, setActivePageIdx] = useState(0)
   const [menuListOpen, setMenuListOpen] = useState(false)
   const { mounted: menuListMounted, closing: menuListClosing } = usePresence(menuListOpen, 180)
   const menuPopoverRef = useRef<HTMLDivElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([])
+  const pageScrollRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([])
+  const { onScroll: onFriendChipScroll, scrollClassName: friendChipScrollClass } = useScrollBarOnScroll()
 
-  // Confirmation modal state for destructive actions (delete item, cancel bill)
+  // Confirmation modal state for destructive actions
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
     title: string
@@ -111,7 +115,6 @@ export function SplitBillScreen({
     }
   }, [fromScan, jenis.title, availableFriends, initialTitle, initialTotal])
 
-  // Close top-right menu list popover on outside click or Escape
   useEffect(() => {
     if (!menuListOpen) return
     const onDown = (e: PointerEvent) => !menuPopoverRef.current?.contains(e.target as Node) && setMenuListOpen(false)
@@ -124,22 +127,24 @@ export function SplitBillScreen({
     }
   }, [menuListOpen])
 
-  const scrollToMenuCard = (idx: number) => {
-    setActiveMenuIdx(idx)
-    const target = cardRefs.current[idx]
+  const totalPages = splitMethod === 'per_item' ? items.length + 2 : 2
+
+  const scrollToPage = (pageIdx: number) => {
+    const clamped = Math.max(0, Math.min(totalPages - 1, pageIdx))
+    setActivePageIdx(clamped)
+    const target = pageRefs.current[clamped]
     if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
 
-  const handleMenuScroll = () => {
-    const container = scrollContainerRef.current
+  const handleViewportScroll = () => {
+    const container = pageScrollRef.current
     if (!container) return
-    const scrollTop = container.scrollTop
-    const cardHeight = container.clientHeight * 0.82
-    const nextIdx = Math.max(0, Math.min(items.length, Math.round(scrollTop / Math.max(1, cardHeight))))
-    if (nextIdx !== activeMenuIdx) {
-      setActiveMenuIdx(nextIdx)
+    const pageH = container.clientHeight || window.innerHeight || 640
+    const idx = Math.max(0, Math.min(totalPages - 1, Math.round(container.scrollTop / pageH)))
+    if (idx !== activePageIdx) {
+      setActivePageIdx(idx)
     }
   }
 
@@ -224,7 +229,6 @@ export function SplitBillScreen({
       confirmLabel: 'Ya, Hapus Menu',
       onConfirm: () => {
         setItems((curr) => curr.filter((it) => it.id !== item.id))
-        setActiveMenuIdx((idx) => Math.max(0, idx - 1))
         notify(`Menu "${item.name}" dihapus`)
       },
     })
@@ -257,13 +261,13 @@ export function SplitBillScreen({
       price: unitPrice * qty,
       assignedParticipantIds: [...selectedFriends],
     }
-    const nextIdx = items.length
+    const newMenuPageIdx = items.length + 1
     setItems((curr) => [...curr, newItem])
     setNewItemName('')
     setNewItemPrice('')
     setNewItemQty('1')
     notify(`Menu "${cleanName}" ditambahkan`)
-    setTimeout(() => scrollToMenuCard(nextIdx), 120)
+    setTimeout(() => scrollToPage(newMenuPageIdx), 120)
   }
 
   const itemsSubtotal = useMemo(() => items.reduce((acc, it) => acc + it.price, 0), [items])
@@ -338,11 +342,33 @@ export function SplitBillScreen({
     })
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-dvh w-full bg-white text-[#054131]">
+        <div className="mx-auto flex w-full max-w-[560px] flex-col gap-[20px] px-[16px] pt-[24px] pb-[40px] md:pt-[32px]">
+          <ScanResultSkeleton />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-dvh w-full bg-white text-[#054131]">
-      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-[16px] px-[16px] pt-[24px] pb-[32px] md:pt-[32px]">
-        {/* Header with Top-Right Menu List Popover */}
-        <header className="relative z-30 flex items-center justify-between gap-[10px]">
+    <div className="relative h-dvh w-full overflow-hidden bg-white text-[#054131]">
+      {/* Faded Kloop Logo Watermark in Center Background */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center select-none"
+      >
+        <img
+          src={KLOOP_LOGO}
+          alt=""
+          className="w-[240px] max-w-[62vw] opacity-[0.06] md:w-[290px]"
+        />
+      </div>
+
+      {/* Top White Blur Layer + Floating Header */}
+      <div className=" fixed inset-x-0 top-0 z-30 bg-gradient-to-b from-white via-white/92 to-transparent pt-[20px] pb-[18px] backdrop-blur-[2px] md:pt-[28px]">
+        <header className="mx-auto flex w-full max-w-[560px] items-center justify-between gap-[10px] px-[16px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
           <div className="flex min-w-0 flex-1 items-center justify-center gap-[6px]">
             <h1 className="truncate font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
@@ -351,7 +377,7 @@ export function SplitBillScreen({
             <Badge>{jenis.title}</Badge>
           </div>
 
-          {/* Top-Right Menu List Trigger & Popover */}
+          {/* Top-Right Menu List Popover Trigger */}
           <div ref={menuPopoverRef} className="relative shrink-0">
             <button
               type="button"
@@ -364,7 +390,6 @@ export function SplitBillScreen({
                   : 'border-[#ececec] bg-[#f8f8ec] text-[#054131] hover:bg-[#eef0d6]'
               }`}
             >
-              {/* Hugeicons MenuRestaurant /Task01 Icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden className="text-[#a6bb18]">
                 <path
                   d="M9 6H20M9 12H20M9 18H20M4.5 6H4.51M4.5 12H4.51M4.5 18H4.51"
@@ -380,8 +405,8 @@ export function SplitBillScreen({
             {menuListMounted && (
               <div
                 role="dialog"
-                aria-label="Daftar semua menu"
-                className={`absolute top-[46px] right-0 z-40 flex w-[284px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
+                aria-label="Daftar semua halaman & menu"
+                className={`absolute top-[46px] right-0 z-40 flex w-[288px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
                   menuListClosing
                     ? '[animation:menu-out_180ms_ease-in_forwards]'
                     : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
@@ -389,21 +414,49 @@ export function SplitBillScreen({
               >
                 <div className="flex items-center justify-between border-b border-[#ececec] pb-[8px]">
                   <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
-                    Daftar Menu ({items.length})
+                    Navigasi & Daftar Menu ({items.length})
                   </span>
                   <span className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">Ketuk untuk lompat</span>
                 </div>
 
-                <div className="flex max-h-[230px] flex-col gap-[6px] overflow-y-auto pr-[2px]">
+                <div className="flex max-h-[250px] flex-col gap-[6px] overflow-y-auto pr-[2px]">
+                  {/* Page 0: Info Tempat & Teman */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      scrollToPage(0)
+                      setMenuListOpen(false)
+                    }}
+                    className={`flex w-full items-center justify-between gap-[8px] rounded-[10px] border px-[10px] py-[8px] text-left transition ${
+                      activePageIdx === 0
+                        ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131]'
+                        : 'border-[#ececec] bg-[#fefef8] text-[#054131] hover:border-[#a6bb18]'
+                    }`}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
+                      <p className="truncate font-['Outfit:Medium'] text-[13px] font-medium">
+                        Info Tempat & Teman
+                      </p>
+                      <p className="truncate font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
+                        {title || 'Nama tempat'} • {selectedFriends.length} teman ikut
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-[4px] bg-white px-[6px] py-[2px] font-['Outfit:Regular'] text-[10px] text-[#8e8e8e]">
+                      Awal
+                    </span>
+                  </button>
+
+                  {/* Menu Pages */}
                   {items.map((it, idx) => {
-                    const isCurrent = activeMenuIdx === idx && splitMethod === 'per_item'
+                    const pageNumber = idx + 1
+                    const isCurrent = activePageIdx === pageNumber && splitMethod === 'per_item'
                     return (
                       <button
                         key={it.id}
                         type="button"
                         onClick={() => {
                           setSplitMethod('per_item')
-                          scrollToMenuCard(idx)
+                          setTimeout(() => scrollToPage(pageNumber), 40)
                           setMenuListOpen(false)
                         }}
                         className={`flex w-full items-center justify-between gap-[8px] rounded-[10px] border px-[10px] py-[8px] text-left transition ${
@@ -414,7 +467,7 @@ export function SplitBillScreen({
                       >
                         <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
                           <p className="truncate font-['Outfit:Medium'] text-[13px] font-medium">
-                            {idx + 1}. {it.name || 'Menu Tanpa Nama'}
+                            Menu #{idx + 1}: {it.name || 'Menu Tanpa Nama'}
                           </p>
                           <p className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
                             {it.qty}x • {it.assignedParticipantIds.length} teman
@@ -431,357 +484,376 @@ export function SplitBillScreen({
                 <button
                   type="button"
                   onClick={() => {
-                    setSplitMethod('per_item')
-                    scrollToMenuCard(items.length)
+                    scrollToPage(totalPages - 1)
                     setMenuListOpen(false)
                   }}
                   className="mt-[2px] flex w-full items-center justify-center gap-[6px] rounded-[8px] bg-[#f2f3e6] py-[8px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
                 >
-                  <span>+ Tambah Menu & Pajak</span>
+                  <span>+ Tambah Menu, Pajak & Ringkasan</span>
                 </button>
               </div>
             )}
           </div>
         </header>
+      </div>
 
-        {isLoading ? (
-          <ScanResultSkeleton />
-        ) : (
-          <div className="stagger flex flex-col gap-[14px]">
-            {/* Nama Tempat & Pilih Teman yang Ikut */}
-            <div className="flex flex-col gap-[10px] rounded-[12px] border border-[#ececec] bg-white p-[12px]">
-              <label className="flex flex-col gap-[5px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                Nama tempat / tagihan
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="cth. Kopi Nako Tembalang"
-                  className="w-full truncate rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[9px] font-['Outfit:Medium'] text-[15px] font-medium text-[#054131] outline-none transition focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
-                />
-              </label>
+      {/* Full-Viewport Vertical Scroll-Snap Pages (1 Centered Card per Page View) */}
+      <div
+        ref={pageScrollRef}
+        onScroll={handleViewportScroll}
+        className="snap-page-scroll relative z-10 h-dvh w-full snap-y snap-mandatory overflow-y-auto scroll-smooth"
+      >
+        {/* PAGE 0 (SCROLL AWAL): Nama Tempat & Siapa Aja yang Ikut Patungan */}
+        <section
+          ref={(el) => {
+            pageRefs.current[0] = el as HTMLDivElement | null
+          }}
+          className="flex min-h-dvh w-full snap-center items-center justify-center px-[16px] pt-[84px] pb-[96px]"
+        >
+          <div className="flex w-full max-w-[520px] flex-col gap-[18px] rounded-[20px] border border-[#ececec] bg-white/92 p-[18px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+            <div className="flex items-center justify-between">
+              <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[3px] font-['Outfit:Medium'] text-[11px] font-medium text-[#a6bb18]">
+                Langkah Awal • Tempat & Teman
+              </span>
+              <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                Halaman 1 / {totalPages}
+              </span>
+            </div>
 
-              <div className="flex flex-col gap-[6px]">
-                <div className="flex items-center justify-between">
-                  <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                    Teman yang ikut ({selectedFriends.length} dipilih)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFriends([...availableFriends])}
-                    className="font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] hover:underline"
-                  >
-                    Pilih Semua
-                  </button>
-                </div>
-                <div className="flex items-center gap-[6px] overflow-x-auto pb-[2px]">
-                  {availableFriends.map((friend) => {
-                    const active = selectedFriends.includes(friend)
-                    return (
-                      <button
-                        key={friend}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => toggleFriendInBill(friend)}
-                        className={`flex shrink-0 items-center gap-[5px] rounded-[999px] border px-[8px] py-[4px] transition duration-200 active:scale-95 ${
-                          active
-                            ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131]'
-                            : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
-                        <span className="truncate font-['Outfit:Regular'] text-[12px]">{friend}</span>
-                      </button>
-                    )
-                  })}
-                </div>
+            <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+              Nama tempat / tagihan
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="cth. Kopi Nako Tembalang"
+                className="w-full truncate rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[11px] font-['Outfit:Medium'] text-[15px] font-medium text-[#054131] outline-none transition focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+              />
+            </label>
+
+            {/* Metode Pembagian */}
+            <div className="flex flex-col gap-[6px]">
+              <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">Metode pembagian</span>
+              <div
+                role="tablist"
+                aria-label="Metode pembagian tagihan"
+                className="grid grid-cols-2 gap-[8px] rounded-[10px] border border-[#ececec] bg-[#fefef8] p-[5px]"
+              >
+                {(
+                  [
+                    { key: 'per_item', label: 'Per Menu' },
+                    { key: 'equal', label: 'Bagi Rata' },
+                  ] as const
+                ).map((tab) => {
+                  const active = splitMethod === tab.key
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => {
+                        setSplitMethod(tab.key)
+                        if (tab.key === 'equal') {
+                          setEqualTotalInput(String(itemsSubtotal + taxAmount + serviceAmount - discountAmount))
+                        }
+                      }}
+                      className={`flex items-center justify-center gap-[6px] rounded-[8px] py-[8px] px-[12px] font-['Outfit:Medium'] text-[13px] font-medium transition-colors duration-200 ${
+                        active ? 'bg-[#a6bb18] text-white' : 'bg-transparent text-[#8e8e8e] hover:bg-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            {/* Toggle Tab: Per Menu vs Bagi Rata */}
-            <div
-              role="tablist"
-              aria-label="Metode pembagian tagihan"
-              className="grid grid-cols-2 gap-[8px] rounded-[10px] border border-[#ececec] bg-white p-[5px]"
-            >
-              {(
-                [
-                  { key: 'per_item', label: 'Per Menu (Scroll)' },
-                  { key: 'equal', label: 'Bagi Rata' },
-                ] as const
-              ).map((tab) => {
-                const active = splitMethod === tab.key
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => {
-                      setSplitMethod(tab.key)
-                      if (tab.key === 'equal') {
-                        setEqualTotalInput(String(itemsSubtotal + taxAmount + serviceAmount - discountAmount))
-                      }
-                    }}
-                    className={`flex items-center justify-center gap-[6px] rounded-[8px] py-[8px] px-[12px] font-['Outfit:Medium'] text-[13px] font-medium transition-colors duration-200 ${
-                      active ? 'bg-[#a6bb18] text-white' : 'bg-white text-[#8e8e8e] hover:bg-[#f8f8ec]'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                )
-              })}
+            {/* Siapa Aja yang Ikut Patungan Disini */}
+            <div className="flex flex-col gap-[8px]">
+              <div className="flex items-center justify-between">
+                <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                  Siapa aja yang ikut patungan? ({selectedFriends.length} dipilih)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFriends([...availableFriends])}
+                  className="font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] hover:underline"
+                >
+                  Pilih Semua
+                </button>
+              </div>
+              <div
+                onScroll={onFriendChipScroll}
+                className={`flex flex-wrap gap-[8px] ${friendChipScrollClass}`}
+              >
+                {availableFriends.map((friend) => {
+                  const active = selectedFriends.includes(friend)
+                  return (
+                    <button
+                      key={friend}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggleFriendInBill(friend)}
+                      className={`flex max-w-[128px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[5px] transition duration-200 active:scale-95 ${
+                        active
+                          ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
+                          : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
+                      <span className="truncate font-['Outfit:Regular'] text-[12px]">{friend}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            {splitMethod === 'per_item' ? (
-              <div className="flex flex-col gap-[8px]">
-                {/* Page Indicator & Scroll Hint Bar */}
-                <div className="flex items-center justify-between px-[4px]">
-                  <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
-                    {activeMenuIdx < items.length
-                      ? `Menu ${activeMenuIdx + 1} dari ${items.length}`
-                      : 'Tambah Menu & Pajak'}
-                  </span>
-                  <div className="flex items-center gap-[5px]">
-                    {items.map((it, idx) => (
+            <button
+              type="button"
+              onClick={() => scrollToPage(1)}
+              className="mt-[2px] flex w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#f2f3e6] py-[10px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.99]"
+            >
+              <span>
+                {splitMethod === 'per_item'
+                  ? `Scroll ke bawah ↓ untuk Menu 1 (${items.length} menu)`
+                  : 'Scroll ke bawah ↓ untuk Total Bagi Rata'}
+              </span>
+            </button>
+          </div>
+        </section>
+
+        {/* PAGES 1..N: 1 Menu = 1 Full Page View (Centered Single Card) */}
+        {splitMethod === 'per_item' &&
+          items.map((item, idx) => {
+            const pageIndex = idx + 1
+            return (
+              <section
+                key={item.id}
+                ref={(el) => {
+                  pageRefs.current[pageIndex] = el as HTMLDivElement | null
+                }}
+                className="flex min-h-dvh w-full snap-center items-center justify-center px-[16px] pt-[84px] pb-[96px]"
+              >
+                <div className="flex w-full max-w-[520px] flex-col gap-[16px] rounded-[20px] border border-[#ececec] bg-white/92 p-[18px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+                  <div className="flex items-center justify-between gap-[8px]">
+                    <div className="flex items-center gap-[8px]">
+                      <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[3px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18]">
+                        Menu {idx + 1} dari {items.length}
+                      </span>
+                      <span className="truncate font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                        {title}
+                      </span>
+                    </div>
+                    {items.length > 1 && (
                       <button
-                        key={it.id}
                         type="button"
-                        aria-label={`Lompat ke menu ${idx + 1}`}
-                        onClick={() => scrollToMenuCard(idx)}
-                        className={`h-[6px] rounded-full transition-all duration-300 ${
-                          activeMenuIdx === idx ? 'w-[18px] bg-[#a6bb18]' : 'w-[6px] bg-[#dedede]'
-                        }`}
-                      />
-                    ))}
-                    <button
-                      type="button"
-                      aria-label="Lompat ke tambah menu & pajak"
-                      onClick={() => scrollToMenuCard(items.length)}
-                      className={`h-[6px] rounded-full transition-all duration-300 ${
-                        activeMenuIdx >= items.length ? 'w-[18px] bg-[#a6bb18]' : 'w-[6px] bg-[#dedede]'
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                {/* Vertical Scroll-Snap Per-Menu Viewport with Top & Bottom White Blur Layers */}
-                <div className="relative overflow-hidden rounded-[16px]">
-                  {/* Top Soft White Blur Layer */}
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[28px] bg-gradient-to-b from-white via-white/85 to-transparent backdrop-blur-[1.5px]"
-                  />
-
-                  <div
-                    ref={scrollContainerRef}
-                    onScroll={handleMenuScroll}
-                    className="flex h-[370px] snap-y snap-mandatory flex-col gap-[16px] overflow-y-auto py-[18px] scroll-smooth"
-                  >
-                    {items.map((item, idx) => (
-                      <div
-                        key={item.id}
-                        ref={(el) => {
-                          cardRefs.current[idx] = el
-                        }}
-                        className="flex min-h-[328px] w-full shrink-0 snap-center flex-col justify-between gap-[12px] rounded-[16px] border border-[#ececec] bg-white p-[14px] shadow-[0_6px_22px_rgba(5,65,49,0.05)]"
+                        onClick={() => requestRemoveItem(item)}
+                        className="rounded-[6px] px-[8px] py-[3px] font-['Outfit:Regular'] text-[12px] text-[#e5484d] transition hover:bg-[#fdf1f1]"
                       >
-                        {/* Card Top Badge & Delete Action */}
-                        <div className="flex items-center justify-between gap-[8px]">
-                          <div className="flex items-center gap-[6px]">
-                            <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[2px] font-['Outfit:Medium'] text-[11px] font-medium text-[#a6bb18]">
-                              Menu #{idx + 1}
-                            </span>
-                            <span className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                              Geser ↕ untuk menu lain
-                            </span>
-                          </div>
-                          {items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => requestRemoveItem(item)}
-                              className="flex items-center gap-[4px] rounded-[6px] px-[8px] py-[3px] font-['Outfit:Regular'] text-[12px] text-[#e5484d] transition hover:bg-[#fdf1f1]"
-                            >
-                              <span>Hapus</span>
-                            </button>
-                          )}
-                        </div>
+                        Hapus Menu
+                      </button>
+                    )}
+                  </div>
 
-                        {/* Editable Menu Name & Price + Qty Stepper */}
-                        <div className="flex flex-col gap-[10px]">
-                          <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                            Nama Menu Pesanan
-                            <input
-                              value={item.name}
-                              onChange={(e) => updateItemName(item.id, e.target.value)}
-                              placeholder="Nama menu"
-                              className="w-full truncate rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px] font-['Outfit:Medium'] text-[15px] font-medium text-[#054131] outline-none focus:border-[#a6bb18]"
-                            />
-                          </label>
+                  {/* Nama Menu & Qty + Harga */}
+                  <div className="flex flex-col gap-[12px]">
+                    <label className="flex flex-col gap-[5px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                      Nama Menu Pesanan
+                      <input
+                        value={item.name}
+                        onChange={(e) => updateItemName(item.id, e.target.value)}
+                        placeholder="Nama menu"
+                        className="w-full truncate rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] font-['Outfit:Medium'] text-[16px] font-medium text-[#054131] outline-none focus:border-[#a6bb18]"
+                      />
+                    </label>
 
-                          <div className="flex items-end justify-between gap-[10px]">
-                            <div className="flex flex-col gap-[4px]">
-                              <span className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">Jumlah</span>
-                              <div className="flex items-center gap-[8px] rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[8px] py-[6px]">
-                                <button
-                                  type="button"
-                                  aria-label={`Kurangi jumlah ${item.name}`}
-                                  onClick={() => updateItemQty(item.id, -1)}
-                                  className="px-[6px] font-['Outfit:SemiBold'] text-[15px] text-[#054131] hover:text-[#a6bb18]"
-                                >
-                                  −
-                                </button>
-                                <span className="font-['Outfit:Medium'] text-[13px] font-medium tabular-nums text-[#054131]">
-                                  {item.qty}x
-                                </span>
-                                <button
-                                  type="button"
-                                  aria-label={`Tambah jumlah ${item.name}`}
-                                  onClick={() => updateItemQty(item.id, 1)}
-                                  className="px-[6px] font-['Outfit:SemiBold'] text-[15px] text-[#054131] hover:text-[#a6bb18]"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-
-                            <label className="flex min-w-0 flex-1 flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                              Total Harga Menu (Rp)
-                              <input
-                                inputMode="numeric"
-                                value={item.price || ''}
-                                onChange={(e) => updateItemPrice(item.id, e.target.value)}
-                                className="w-full rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[7px] text-right font-['Outfit:SemiBold'] text-[16px] font-semibold tabular-nums text-[#054131] outline-none focus:border-[#a6bb18]"
-                              />
-                            </label>
-                          </div>
-                        </div>
-
-                        <div className="relative h-0 w-full">
-                          <div className="absolute inset-[-1px_0_0_0]">
-                            <img alt="" className="block size-full max-w-none" src={HOME_IMAGES.dashedLine} />
-                          </div>
-                        </div>
-
-                        {/* Friend Assignment per Item */}
-                        <div className="flex flex-col gap-[8px]">
-                          <div className="flex items-center justify-between">
-                            <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                              Dibagi ke ({item.assignedParticipantIds.length} teman):
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => assignAllToItem(item.id)}
-                              className="font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] hover:underline"
-                            >
-                              Pilih Semua Teman
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-[8px]">
-                            {selectedFriends.map((friend) => {
-                              const assigned = item.assignedParticipantIds.includes(friend)
-                              return (
-                                <button
-                                  key={friend}
-                                  type="button"
-                                  aria-pressed={assigned}
-                                  onClick={() => toggleFriendOnItem(item.id, friend)}
-                                  className={`flex max-w-[118px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[5px] transition duration-150 active:scale-95 ${
-                                    assigned
-                                      ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
-                                      : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-65 hover:opacity-100'
-                                  }`}
-                                >
-                                  <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
-                                  <span className="truncate font-['Outfit:Regular'] text-[12px]">{friend}</span>
-                                </button>
-                              )
-                            })}
-                          </div>
+                    <div className="flex items-end justify-between gap-[12px]">
+                      <div className="flex flex-col gap-[5px]">
+                        <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">Jumlah</span>
+                        <div className="flex items-center gap-[10px] rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px]">
+                          <button
+                            type="button"
+                            aria-label={`Kurangi jumlah ${item.name}`}
+                            onClick={() => updateItemQty(item.id, -1)}
+                            className="px-[6px] font-['Outfit:SemiBold'] text-[16px] text-[#054131] hover:text-[#a6bb18]"
+                          >
+                            −
+                          </button>
+                          <span className="font-['Outfit:Medium'] text-[14px] font-medium tabular-nums text-[#054131]">
+                            {item.qty}x
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Tambah jumlah ${item.name}`}
+                            onClick={() => updateItemQty(item.id, 1)}
+                            className="px-[6px] font-['Outfit:SemiBold'] text-[16px] text-[#054131] hover:text-[#a6bb18]"
+                          >
+                            +
+                          </button>
                         </div>
                       </div>
-                    ))}
 
-                    {/* Final Scroll Page: Add Menu & Tax/Service */}
-                    <div
-                      ref={(el) => {
-                        cardRefs.current[items.length] = el
-                      }}
-                      className="flex min-h-[328px] w-full shrink-0 snap-center flex-col justify-between gap-[12px] rounded-[16px] border border-dashed border-[#dedede] bg-[#fefef8] p-[14px]"
-                    >
-                      <form onSubmit={handleAddItem} className="flex flex-col gap-[10px]">
-                        <p className="font-['Outfit:Medium'] text-[14px] font-medium text-[#054131]">
-                          + Tambah Menu Lainnya
-                        </p>
-                        <div className="grid grid-cols-12 gap-[8px]">
-                          <input
-                            value={newItemName}
-                            onChange={(e) => setNewItemName(e.target.value)}
-                            placeholder="Nama menu (cth. Matcha Latte)"
-                            className="col-span-12 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18] sm:col-span-6"
-                          />
-                          <input
-                            value={newItemQty}
-                            onChange={(e) => setNewItemQty(e.target.value)}
-                            inputMode="numeric"
-                            placeholder="Qty"
-                            className="col-span-4 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18] sm:col-span-2"
-                          />
-                          <input
-                            value={newItemPrice}
-                            onChange={(e) => setNewItemPrice(e.target.value)}
-                            inputMode="numeric"
-                            placeholder="Harga satuan (Rp)"
-                            className="col-span-8 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18] sm:col-span-4"
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          className="self-end rounded-[8px] bg-[#a6bb18] px-[14px] py-[7px] font-['Outfit:Medium'] text-[12px] font-medium text-white transition hover:bg-[#97ab12]"
-                        >
-                          + Tambah ke Daftar Menu
-                        </button>
-                      </form>
-
-                      <div className="flex flex-col gap-[8px] border-t border-[#ececec] pt-[10px]">
-                        <p className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
-                          Pajak & Biaya Layanan
-                        </p>
-                        <div className="grid grid-cols-2 gap-[10px]">
-                          <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                            Pajak / PPN (Rp)
-                            <input
-                              inputMode="numeric"
-                              value={taxAmount || ''}
-                              placeholder="0"
-                              onChange={(e) => setTaxAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
-                              className="rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[7px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                            />
-                          </label>
-                          <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                            Service Charge (Rp)
-                            <input
-                              inputMode="numeric"
-                              value={serviceAmount || ''}
-                              placeholder="0"
-                              onChange={(e) => setServiceAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
-                              className="rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[7px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                            />
-                          </label>
-                        </div>
-                      </div>
+                      <label className="flex min-w-0 flex-1 flex-col gap-[5px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                        Total Harga Menu (Rp)
+                        <input
+                          inputMode="numeric"
+                          value={item.price || ''}
+                          onChange={(e) => updateItemPrice(item.id, e.target.value)}
+                          className="w-full rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[9px] text-right font-['Outfit:SemiBold'] text-[17px] font-semibold tabular-nums text-[#054131] outline-none focus:border-[#a6bb18]"
+                        />
+                      </label>
                     </div>
                   </div>
 
-                  {/* Bottom Soft White Blur Layer */}
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[32px] bg-gradient-to-t from-white via-white/85 to-transparent backdrop-blur-[1.5px]"
-                  />
+                  <div className="relative h-0 w-full">
+                    <div className="absolute inset-[-1px_0_0_0]">
+                      <img alt="" className="block size-full max-w-none" src={HOME_IMAGES.dashedLine} />
+                    </div>
+                  </div>
+
+                  {/* Pilih Avatar Teman untuk Menu Ini */}
+                  <div className="flex flex-col gap-[10px]">
+                    <div className="flex items-center justify-between">
+                      <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                        Siapa yang pesan menu ini? ({item.assignedParticipantIds.length} teman)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => assignAllToItem(item.id)}
+                        className="font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] hover:underline"
+                      >
+                        Pilih Semua
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-[8px]">
+                      {selectedFriends.map((friend) => {
+                        const assigned = item.assignedParticipantIds.includes(friend)
+                        return (
+                          <button
+                            key={friend}
+                            type="button"
+                            aria-pressed={assigned}
+                            onClick={() => toggleFriendOnItem(item.id, friend)}
+                            className={`flex max-w-[124px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[6px] transition duration-150 active:scale-95 ${
+                              assigned
+                                ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
+                                : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-65 hover:opacity-100'
+                            }`}
+                          >
+                            <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
+                            <span className="truncate font-['Outfit:Regular'] text-[12px]">{friend}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quick Next/Prev Step Footer inside Card */}
+                  <div className="flex items-center justify-between border-t border-[#ececec] pt-[10px] text-[12px]">
+                    <button
+                      type="button"
+                      onClick={() => scrollToPage(pageIndex - 1)}
+                      className="font-['Outfit:Regular'] text-[#8e8e8e] hover:text-[#054131]"
+                    >
+                      ↑ Sebelumnya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollToPage(pageIndex + 1)}
+                      className="font-['Outfit:Medium'] font-medium text-[#a6bb18] hover:underline"
+                    >
+                      {idx < items.length - 1 ? `Menu ${idx + 2} ↓` : 'Pajak & Ringkasan ↓'}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </section>
+            )
+          })}
+
+        {/* FINAL PAGE: Pajak, Tambah Menu Baru & Ringkasan Pembagian (or Bagi Rata Final Card) */}
+        <section
+          ref={(el) => {
+            pageRefs.current[totalPages - 1] = el as HTMLDivElement | null
+          }}
+          className="flex min-h-dvh w-full snap-center items-center justify-center px-[16px] pt-[84px] pb-[96px]"
+        >
+          <div className="flex w-full max-w-[520px] flex-col gap-[14px] rounded-[20px] border border-[#ececec] bg-white/92 p-[18px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+            <div className="flex items-center justify-between">
+              <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[3px] font-['Outfit:Medium'] text-[11px] font-medium text-[#a6bb18]">
+                {splitMethod === 'per_item' ? 'Pajak, Menu Baru & Ringkasan' : 'Nominal Bagi Rata & Ringkasan'}
+              </span>
+              <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
+                Halaman {totalPages} / {totalPages}
+              </span>
+            </div>
+
+            {splitMethod === 'per_item' ? (
+              <>
+                {/* Form Tambah Menu Baru */}
+                <form
+                  onSubmit={handleAddItem}
+                  className="flex flex-col gap-[8px] rounded-[12px] border border-dashed border-[#dedede] bg-[#fefef8] p-[12px]"
+                >
+                  <p className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
+                    + Tambah Menu Lainnya
+                  </p>
+                  <div className="grid grid-cols-12 gap-[8px]">
+                    <input
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                      placeholder="Nama menu baru"
+                      className="col-span-6 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[7px] font-['Outfit:Regular'] text-[12px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                    />
+                    <input
+                      value={newItemQty}
+                      onChange={(e) => setNewItemQty(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="Qty"
+                      className="col-span-2 rounded-[8px] border border-[#ececec] bg-white px-[8px] py-[7px] font-['Outfit:Regular'] text-[12px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                    />
+                    <input
+                      value={newItemPrice}
+                      onChange={(e) => setNewItemPrice(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="Harga (Rp)"
+                      className="col-span-4 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[7px] font-['Outfit:Regular'] text-[12px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="self-end rounded-[8px] bg-[#f2f3e6] px-[12px] py-[6px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
+                  >
+                    + Tambah & Buka Halaman Menu
+                  </button>
+                </form>
+
+                {/* Pajak & Service */}
+                <div className="grid grid-cols-2 gap-[10px]">
+                  <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
+                    Pajak / PPN (Rp)
+                    <input
+                      inputMode="numeric"
+                      value={taxAmount || ''}
+                      placeholder="0"
+                      onChange={(e) => setTaxAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
+                      className="rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
+                    Service Charge (Rp)
+                    <input
+                      inputMode="numeric"
+                      value={serviceAmount || ''}
+                      placeholder="0"
+                      onChange={(e) => setServiceAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
+                      className="rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                    />
+                  </label>
+                </div>
+              </>
             ) : (
-              /* Mode Bagi Rata (Flat) */
-              <div className="flex flex-col gap-[14px] rounded-[12px] border border-[#ececec] bg-white p-[12px]">
+              /* Input Total Bagi Rata */
+              <div className="flex flex-col gap-[10px]">
                 <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
                   Total Tagihan Bersama (Rp)
                   <input
@@ -789,43 +861,35 @@ export function SplitBillScreen({
                     value={equalTotalInput}
                     onChange={(e) => setEqualTotalInput(e.target.value.replace(/\D/g, ''))}
                     placeholder="185000"
-                    className="rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] font-['Outfit:SemiBold'] text-[20px] font-semibold text-[#054131] outline-none focus:border-[#a6bb18]"
+                    className="rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] font-['Outfit:SemiBold'] text-[20px] font-semibold text-[#054131] outline-none focus:border-[#a6bb18]"
                   />
                 </label>
-                <div className="flex items-center justify-between rounded-[8px] bg-[#f2f3e6] px-[12px] py-[10px]">
-                  <span className="font-['Outfit:Regular'] text-[13px] text-[#054131]">
-                    Dibagi rata ke {selectedFriends.length} teman
-                  </span>
-                  <span className="font-['Outfit:SemiBold'] text-[16px] font-semibold tabular-nums text-[#a6bb18]">
-                    {formatRupiah(Math.round(grandTotal / Math.max(1, selectedFriends.length)))} / orang
-                  </span>
-                </div>
               </div>
             )}
 
-            {/* Preview Pembagian per Teman */}
-            <div className="flex flex-col gap-[10px] rounded-[12px] border border-[#ececec] bg-white p-[12px]">
+            {/* Ringkasan per Teman */}
+            <div className="flex flex-col gap-[8px] border-t border-[#ececec] pt-[10px]">
               <div className="flex items-center justify-between">
-                <p className="font-['Outfit:Medium'] text-[14px] font-medium text-[#054131]">
-                  Ringkasan per Teman
+                <p className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
+                  Ringkasan per Teman ({selectedFriends.length} orang)
                 </p>
                 <p className="font-['Outfit:SemiBold'] text-[16px] font-semibold tabular-nums text-[#054131]">
-                  Total: {formatRupiah(grandTotal)}
+                  {formatRupiah(grandTotal)}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-[8px]">
+              <div className="grid max-h-[126px] grid-cols-2 gap-[8px] overflow-y-auto pr-[2px]">
                 {participantShares.map((p) => (
                   <div
                     key={p.name}
-                    className="flex items-center justify-between gap-[8px] rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[7px]"
+                    className="flex items-center justify-between gap-[6px] rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[6px]"
                   >
                     <div className="flex min-w-0 items-center gap-[6px]">
-                      <span className="relative block size-[22px] shrink-0">
+                      <span className="relative block size-[20px] shrink-0">
                         <Img src={p.avatarUrl} skeleton="rounded-full" />
                       </span>
-                      <span className="truncate font-['Outfit:Regular'] text-[13px] text-[#054131]">{p.name}</span>
+                      <span className="truncate font-['Outfit:Regular'] text-[12px] text-[#054131]">{p.name}</span>
                     </div>
-                    <span className="shrink-0 font-['Outfit:Medium'] text-[13px] font-medium tabular-nums text-[#a6bb18]">
+                    <span className="shrink-0 font-['Outfit:Medium'] text-[12px] font-medium tabular-nums text-[#a6bb18]">
                       {formatRupiah(p.totalOwed)}
                     </span>
                   </div>
@@ -833,25 +897,67 @@ export function SplitBillScreen({
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-[10px]">
+            <div className="flex gap-[10px] pt-[2px]">
               <button
                 type="button"
                 onClick={requestCancelBack}
-                className="flex-1 rounded-[10px] bg-[#f2f3e6] py-[12px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
+                className="flex-1 rounded-[10px] bg-[#f2f3e6] py-[11px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleFinish}
-                className="flex-[2] rounded-[10px] bg-[#a6bb18] py-[12px] font-['Outfit:Medium'] text-[14px] font-medium text-white transition hover:bg-[#97ab12] active:scale-[0.98]"
+                className="flex-[2] rounded-[10px] bg-[#a6bb18] py-[11px] font-['Outfit:Medium'] text-[14px] font-medium text-white transition hover:bg-[#97ab12] active:scale-[0.98]"
               >
                 Simpan & Lihat Rincian
               </button>
             </div>
           </div>
-        )}
+        </section>
+      </div>
+
+      {/* Bottom White Blur Layer + Floating Page Dots & Quick Summary Pill */}
+      <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-white via-white/92 to-transparent pt-[18px] pb-[16px] backdrop-blur-[2px]">
+        <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[12px] px-[16px]">
+          {/* Page Dots */}
+          <div className="flex items-center gap-[6px]">
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Lompat ke halaman ${i + 1}`}
+                onClick={() => scrollToPage(i)}
+                className={`h-[6px] rounded-full transition-all duration-300 ${
+                  activePageIdx === i ? 'w-[20px] bg-[#a6bb18]' : 'w-[6px] bg-[#dedede]'
+                }`}
+              />
+            ))}
+          </div>
+
+          <div className="flex items-center gap-[10px]">
+            <span className="font-['Outfit:SemiBold'] text-[14px] font-semibold tabular-nums text-[#054131]">
+              {formatRupiah(grandTotal)}
+            </span>
+            {activePageIdx < totalPages - 1 ? (
+              <button
+                type="button"
+                onClick={() => scrollToPage(activePageIdx + 1)}
+                className="rounded-full bg-[#f2f3e6] px-[12px] py-[6px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
+              >
+                Lanjut ↓
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="rounded-full bg-[#a6bb18] px-[14px] py-[6px] font-['Outfit:Medium'] text-[12px] font-medium text-white transition hover:bg-[#97ab12]"
+              >
+                Simpan ✓
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <ConfirmModal

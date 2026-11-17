@@ -123,3 +123,31 @@ export function useCountUp(target: number, duration = 700) {
   return value
 }
 
+/**
+ * Hides a horizontal scrollbar initially and reveals it only while the user is actively scrolling.
+ */
+export function useScrollBarOnScroll(hideDelayMs = 750) {
+  const [scrolling, setScrolling] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const onScroll = useCallback(() => {
+    setScrolling(true)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      setScrolling(false)
+    }, hideDelayMs)
+  }, [hideDelayMs])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  return {
+    scrolling,
+    onScroll,
+    scrollClassName: `chip-scroll ${scrolling ? 'is-scrolling' : ''}`,
+  }
+}
+

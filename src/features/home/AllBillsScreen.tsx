@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Skeleton, useSimulatedLoading } from '@/components/skeletons'
-import { Badge, RoundIconButton } from '@/components/ui'
+import { Badge, RoundIconButton, useScrollBarOnScroll } from '@/components/ui'
 import { HOME_IMAGES, SCAN_ICONS, formatRupiah } from '@/services/bill.service'
 import type { Bill } from '@/types'
 import { ActiveBillCard } from './ActiveBillCard'
@@ -214,6 +214,7 @@ export function AllBillsScreen({
 
   const [query, setQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<BillFilterKey>('all')
+  const { onScroll: onChipScroll, scrollClassName: chipScrollClass } = useScrollBarOnScroll()
 
   const isBillSettled = (b: Bill) => b.participants.every((p) => p.paid)
 
@@ -290,11 +291,12 @@ export function AllBillsScreen({
               )}
             </div>
 
-            {/* Filter Chips with Contextual Hugeicons */}
+            {/* Filter Chips with Contextual Hugeicons (scrollbar hidden initially, appears only while scrolling) */}
             <div
               role="tablist"
               aria-label="Filter tagihan"
-              className="flex items-center gap-[8px] overflow-x-auto pb-[2px]"
+              onScroll={onChipScroll}
+              className={`flex items-center gap-[8px] overflow-x-auto pb-[4px] ${chipScrollClass}`}
             >
               {FILTER_CHIPS.map((chip) => {
                 const active = activeFilter === chip.key
