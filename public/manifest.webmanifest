@@ -1,11 +1,13 @@
 {
-  "name": "Kloop — Split Bill & Patungan",
+  "id": "/?app=kloop-v4",
+  "name": "Kloop",
   "short_name": "Kloop",
   "description": "Aplikasi Split Bill, Scan Struk OCR, dan Pantau Talangan Bareng Teman.",
   "lang": "id",
-  "start_url": "/",
+  "start_url": "/?app=kloop-v4",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#FFFFFF",
   "theme_color": "#FFFFFF",
@@ -14,7 +16,7 @@
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }

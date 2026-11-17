@@ -1,21 +1,14 @@
-const CACHE_NAME = 'kloop-pwa-v3'
-const PRECACHE_URLS = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest']
+const CACHE_NAME = 'kloop-pwa-v4'
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting()
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .catch(() => undefined),
-  )
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   )
 })
@@ -24,26 +17,10 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   if (request.method !== 'GET') return
 
-  const url = new URL(request.url)
-  if (url.origin !== self.location.origin) return
-
-  // Skip Vite HMR / dev virtual modules
-  if (url.pathname.startsWith('/@') || url.pathname.startsWith('/src/') || url.pathname.startsWith('/node_modules/')) {
-    return
+  // Only provide offline fallback for top-level HTML page navigations, never for images/assets
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/index.html') || Response.error()),
+    )
   }
-
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const copy = response.clone()
-          caches
-            .open(CACHE_NAME)
-            .then((cache) => cache.put(request, copy))
-            .catch(() => undefined)
-        }
-        return response
-      })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/index.html'))),
-  )
 })

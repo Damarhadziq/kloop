@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { ScanResultSkeleton, useSimulatedLoading } from '@/components/skeletons'
 import { ConfirmModal, Icon, Img, KLOOP_LOGO, PrimaryButton, usePresence, useScrollBarOnScroll } from '@/components/ui'
 import {
@@ -66,12 +74,9 @@ export function SplitBillScreen({
   const [menuListOpen, setMenuListOpen] = useState(false)
   const { mounted: menuListMounted, closing: menuListClosing } = usePresence(menuListOpen, 180)
 
-  // Hold-and-drag state for the right-side vertical ellipse rail
+  // Hold-and-drag state for the right-side vertical ellipse rail (strictly visible ONLY while held)
   const [isHoldingRail, setIsHoldingRail] = useState(false)
-  const { mounted: floatMenuMounted, closing: floatMenuClosing } = usePresence(isHoldingRail, 180)
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const railRef = useRef<HTMLDivElement>(null)
-  const dotRefs = useRef<(HTMLDivElement | null)[]>([])
 
   const menuPopoverRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
@@ -136,11 +141,23 @@ export function SplitBillScreen({
     }
   }, [menuListOpen])
 
+  // Guarantee floating pills hide immediately whenever finger/pointer is released anywhere on screen
   useEffect(() => {
+    if (!isHoldingRail) return
+    const endHold = () => setIsHoldingRail(false)
+    window.addEventListener('pointerup', endHold)
+    window.addEventListener('pointercancel', endHold)
+    window.addEventListener('touchend', endHold)
+    window.addEventListener('touchcancel', endHold)
+    window.addEventListener('blur', endHold)
     return () => {
-      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+      window.removeEventListener('pointerup', endHold)
+      window.removeEventListener('pointercancel', endHold)
+      window.removeEventListener('touchend', endHold)
+      window.removeEventListener('touchcancel', endHold)
+      window.removeEventListener('blur', endHold)
     }
-  }, [])
+  }, [isHoldingRail])
 
   const pageMetaList = useMemo(() => {
     const list: { index: number; shortTitle: string }[] = [
@@ -204,48 +221,35 @@ export function SplitBillScreen({
     }
   }
 
-  // Resolve which ellipse index the user's finger Y position is pointing at during hold-and-drag
+  // Maps the finger's Y position continuously along the rail to the exact page index [0 .. totalPages - 1]
   const resolveRailIndexAtClientY = useCallback(
     (clientY: number): number => {
-      let closestIdx = activePageIdx
-      let minDist = Infinity
-      for (let i = 0; i < totalPages; i++) {
-        const dotEl = dotRefs.current[i]
-        if (!dotEl) continue
-        const r = dotEl.getBoundingClientRect()
-        const center = r.top + r.height / 2
-        const d = Math.abs(clientY - center)
-        if (d < minDist) {
-          minDist = d
-          closestIdx = i
-        }
-      }
-      return closestIdx
+      const rail = railRef.current
+      if (!rail || totalPages <= 1) return 0
+      const rect = rail.getBoundingClientRect()
+      const pad = 12
+      const usableTop = rect.top + pad
+      const usableHeight = Math.max(1, rect.height - pad * 2)
+      const ratio = Math.max(0, Math.min(1, (clientY - usableTop) / usableHeight))
+      return Math.round(ratio * (totalPages - 1))
     },
-    [activePageIdx, totalPages],
+    [totalPages],
   )
 
   const handleRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId)
-    const clientY = e.clientY
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
-    // Open floating menu only when held (~140ms) or dragged
-    holdTimerRef.current = setTimeout(() => {
-      setIsHoldingRail(true)
-      const targetIdx = resolveRailIndexAtClientY(clientY)
-      scrollToPage(targetIdx, 'smooth')
-    }, 140)
+    e.preventDefault()
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* ignore if pointer capture not supported */
+    }
+    setIsHoldingRail(true)
+    const targetIdx = resolveRailIndexAtClientY(e.clientY)
+    scrollToPage(targetIdx, 'smooth')
   }
 
   const handleRailPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return
-    if (!isHoldingRail) {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current)
-        holdTimerRef.current = null
-      }
-      setIsHoldingRail(true)
-    }
+    if (!isHoldingRail) return
     const targetIdx = resolveRailIndexAtClientY(e.clientY)
     if (targetIdx !== activePageIdx) {
       scrollToPage(targetIdx, 'smooth')
@@ -253,12 +257,12 @@ export function SplitBillScreen({
   }
 
   const handleRailPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current)
-      holdTimerRef.current = null
-    }
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId)
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }
+    } catch {
+      /* ignore */
     }
     setIsHoldingRail(false)
   }
@@ -457,19 +461,31 @@ export function SplitBillScreen({
     })
   }
 
-  // Compact & consistent label/input classes matching Login page typography
   const labelTextClass =
     "font-['Outfit:Regular'] text-[15px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]"
   const inputBoxClass =
     "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[12px] font-['Outfit:Regular'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
 
-  // Computes the 3D scale/enter transition class for each card in the vertical stack
+  // Computes the 3D sunken/submerged stack effect for adjacent cards vs the active main card
+  const getSectionStackClass = (cardIdx: number) => {
+    const diff = cardIdx - activePageIdx
+    if (diff === 0) {
+      return 'relative z-20 my-[2px]'
+    }
+    if (diff < 0) {
+      // Previous card above: pulled close & tucked under the active card
+      return 'relative z-0 -mb-[26px]'
+    }
+    // Next card below: pulled close & tucked under the active card
+    return 'relative z-0 -mt-[26px]'
+  }
+
   const getCardStackClass = (cardIdx: number) => {
     const isActive = activePageIdx === cardIdx
-    return `w-full max-w-[392px] rounded-[20px] border bg-white/95 p-[16px] backdrop-blur-[3px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+    return `relative overflow-hidden w-full max-w-[388px] rounded-[20px] border bg-white p-[16px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
       isActive
-        ? 'z-10 scale-100 opacity-100 border-[#ececec] shadow-[0_14px_34px_rgba(5,65,49,0.08)]'
-        : 'z-0 scale-[0.88] opacity-45 border-[#ececec]/80 shadow-none'
+        ? 'scale-100 opacity-100 border-[#ececec] shadow-[0_16px_38px_rgba(5,65,49,0.09)]'
+        : 'scale-[0.90] border-[#ececec]/70 shadow-none select-none'
     }`
   }
 
@@ -484,18 +500,18 @@ export function SplitBillScreen({
   }
 
   return (
-    <div className="relative flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-white text-[#054131]">
+    <div className="relative h-dvh max-h-dvh w-full overflow-hidden bg-white text-[#054131]">
       {/* Faded Kloop Logo Watermark in Center Background */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center select-none"
+        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center select-none"
       >
         <img src={KLOOP_LOGO} alt="" className="w-[230px] max-w-[58vw] opacity-[0.06] md:w-[280px]" />
       </div>
 
-      {/* Top Header */}
-      <div className="relative z-30 shrink-0 bg-white px-[16px] pt-[20px] pb-[8px] md:pt-[28px]">
-        <header className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[10px]">
+      {/* Fixed Header */}
+      <header className="fixed inset-x-0 top-0 z-40 bg-white/92 px-[16px] pt-[20px] pb-[12px] backdrop-blur-md md:pt-[28px]">
+        <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
 
           <h1 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
@@ -533,7 +549,7 @@ export function SplitBillScreen({
               <div
                 role="dialog"
                 aria-label="Daftar menu"
-                className={`absolute top-[48px] right-0 z-40 flex w-[268px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
+                className={`absolute top-[48px] right-0 z-50 flex w-[268px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
                   menuListClosing
                     ? '[animation:menu-out_180ms_ease-in_forwards]'
                     : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
@@ -596,89 +612,79 @@ export function SplitBillScreen({
               </div>
             )}
           </div>
-        </header>
+        </div>
+      </header>
+
+      {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail (Floating pills ONLY exist while held) */}
+      <div
+        ref={railRef}
+        onPointerDown={handleRailPointerDown}
+        onPointerMove={handleRailPointerMove}
+        onPointerUp={handleRailPointerEnd}
+        onPointerCancel={handleRailPointerEnd}
+        onLostPointerCapture={() => setIsHoldingRail(false)}
+        className="fixed top-1/2 right-[4px] z-40 flex -translate-y-1/2 cursor-grab touch-none select-none flex-col items-end gap-[9px] py-[18px] pl-[18px] pr-[6px] active:cursor-grabbing md:right-[16px]"
+      >
+        {pageMetaList.map((meta) => {
+          const isActive = activePageIdx === meta.index
+          const distance = Math.abs(activePageIdx - meta.index)
+
+          const waveTransform = isActive
+            ? '-translate-x-[14px] scale-[1.06]'
+            : distance === 1
+              ? '-translate-x-[5px] scale-[1.0]'
+              : 'translate-x-0 scale-[0.94] opacity-75'
+
+          return (
+            <div key={meta.index} className="relative flex h-[22px] items-center justify-end">
+              {/* Floating Pill appears ONLY while user is actively holding the rail */}
+              {isHoldingRail && (
+                <div
+                  style={{ animationDelay: `${meta.index * 20}ms` }}
+                  className={`pointer-events-none mr-[10px] flex max-w-[180px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-150 ease-out [animation:float-pill-in_180ms_cubic-bezier(0.34,1.56,0.64,1)_both] ${waveTransform} ${
+                    isActive
+                      ? 'border-[#a6bb18] bg-[#054131] text-white'
+                      : 'border-[#ececec] bg-white/95 text-[#054131]'
+                  }`}
+                >
+                  <span className="truncate font-['Outfit:Medium'] text-[12px] font-medium">
+                    {meta.shortTitle}
+                  </span>
+                </div>
+              )}
+
+              {/* Right-Side Progress Ellipse */}
+              <span
+                className={`block rounded-full transition-all duration-200 ${
+                  isActive
+                    ? 'h-[22px] w-[7px] bg-[#a6bb18] shadow-[0_0_8px_rgba(166,187,24,0.45)]'
+                    : 'h-[7px] w-[7px] bg-[#dedede]'
+                }`}
+              />
+            </div>
+          )
+        })}
       </div>
 
       {/* Main Stacked Carousel Viewport */}
-      <div className="relative flex-1 min-h-0 w-full">
-        {/* Top White Blur Layer covering the peeking previous card */}
+      <div className="relative h-full w-full pt-[68px]">
+        {/* Top White Blur Layer to submerge the upper peeking card */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[76px] bg-gradient-to-b from-white via-white/85 to-transparent backdrop-blur-[2px]"
+          className="pointer-events-none absolute inset-x-0 top-[68px] z-30 h-[96px] bg-gradient-to-b from-white via-white/88 to-transparent backdrop-blur-[4px]"
         />
 
-        {/* Bottom White Blur Layer covering the peeking next card */}
+        {/* Bottom White Blur Layer to submerge the lower peeking card */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[76px] bg-gradient-to-t from-white via-white/85 to-transparent backdrop-blur-[2px]"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[96px] bg-gradient-to-t from-white via-white/88 to-transparent backdrop-blur-[4px]"
         />
 
-        {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail */}
-        <div
-          ref={railRef}
-          onPointerDown={handleRailPointerDown}
-          onPointerMove={handleRailPointerMove}
-          onPointerUp={handleRailPointerEnd}
-          onPointerCancel={handleRailPointerEnd}
-          className=" absolute top-1/2 right-[6px] z-30 flex -translate-y-1/2 touch-none select-none flex-col items-end gap-[8px] py-[14px] pl-[12px] pr-[4px] md:right-[16px]"
-        >
-          {pageMetaList.map((meta) => {
-            const isActive = activePageIdx === meta.index
-            const distance = Math.abs(activePageIdx - meta.index)
-
-            // Magnetic wave offset while finger is holding and scrubbing along the rail
-            const waveTransform = isActive
-              ? '-translate-x-[12px] scale-[1.06]'
-              : distance === 1
-                ? '-translate-x-[5px] scale-[1.01]'
-                : 'translate-x-0 scale-95 opacity-80'
-
-            return (
-              <div
-                key={meta.index}
-                ref={(el) => {
-                  dotRefs.current[meta.index] = el
-                }}
-                className="relative flex h-[22px] items-center justify-end"
-              >
-                {/* Floating Pill without inner ellipse — appears ONLY while holding & dragging */}
-                {floatMenuMounted && (
-                  <div
-                    style={{ animationDelay: `${meta.index * 28}ms` }}
-                    className={`pointer-events-none mr-[10px] flex max-w-[180px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-200 ease-out ${waveTransform} ${
-                      floatMenuClosing
-                        ? '[animation:float-pill-out_160ms_ease-in_forwards]'
-                        : '[animation:float-pill-in_240ms_cubic-bezier(0.34,1.56,0.64,1)_both]'
-                    } ${
-                      isActive
-                        ? 'border-[#a6bb18] bg-[#054131] text-white'
-                        : 'border-[#ececec] bg-white/95 text-[#054131]'
-                    }`}
-                  >
-                    <span className="truncate font-['Outfit:Medium'] text-[12px] font-medium">
-                      {meta.shortTitle}
-                    </span>
-                  </div>
-                )}
-
-                {/* Right-Side Progress Ellipse */}
-                <span
-                  className={`block rounded-full transition-all duration-300 ${
-                    isActive
-                      ? 'h-[22px] w-[7px] bg-[#a6bb18] shadow-[0_0_8px_rgba(166,187,24,0.45)]'
-                      : 'h-[7px] w-[7px] bg-[#dedede]'
-                  }`}
-                />
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Stacked Vertical Scroll Container (previous & next cards peek above/below under white blur) */}
+        {/* Stacked Vertical Scroll Container */}
         <div
           ref={pageScrollRef}
           onScroll={handleViewportScroll}
-          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[14px] overflow-y-auto px-[16px] pr-[28px] py-[17vh] scroll-smooth"
+          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center overflow-y-auto px-[16px] pr-[26px] py-[13vh] scroll-smooth"
         >
           {/* CARD 0: Nama Tempat, Metode Pembagian, & Teman Patungan */}
           <section
@@ -686,9 +692,17 @@ export function SplitBillScreen({
               pageRefs.current[0] = el
             }}
             onClick={() => activePageIdx !== 0 && scrollToPage(0)}
-            className="flex w-full shrink-0 snap-center justify-center"
+            className={`flex w-full shrink-0 snap-center justify-center transition-all duration-500 ${getSectionStackClass(0)}`}
           >
-            <div className={`flex flex-col gap-[16px] ${getCardStackClass(0)}`}>
+            <div className={`flex flex-col gap-[15px] ${getCardStackClass(0)}`}>
+              {/* White Blur Layer directly over inactive card so it looks submerged */}
+              {activePageIdx !== 0 && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 z-20 rounded-[20px] bg-white/72 backdrop-blur-[5px] transition-opacity duration-300"
+                />
+              )}
+
               <label className="flex w-full flex-col gap-[8px]">
                 <span className={labelTextClass}>Nama Tempat / Tagihan</span>
                 <input
@@ -825,16 +839,25 @@ export function SplitBillScreen({
           {splitMethod === 'per_item' &&
             items.map((item, idx) => {
               const pageIndex = idx + 1
+              const isCardActive = activePageIdx === pageIndex
               return (
                 <section
                   key={item.id}
                   ref={(el) => {
                     pageRefs.current[pageIndex] = el
                   }}
-                  onClick={() => activePageIdx !== pageIndex && scrollToPage(pageIndex)}
-                  className="flex w-full shrink-0 snap-center justify-center"
+                  onClick={() => !isCardActive && scrollToPage(pageIndex)}
+                  className={`flex w-full shrink-0 snap-center justify-center transition-all duration-500 ${getSectionStackClass(pageIndex)}`}
                 >
                   <div className={`flex flex-col gap-[14px] ${getCardStackClass(pageIndex)}`}>
+                    {/* White Blur Layer directly over inactive card so it looks submerged */}
+                    {!isCardActive && (
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 z-20 rounded-[20px] bg-white/72 backdrop-blur-[5px] transition-opacity duration-300"
+                      />
+                    )}
+
                     {/* Menu Index without background frame + Icon-only Delete button */}
                     <div className="flex items-center justify-between gap-[8px]">
                       <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18]">
@@ -974,9 +997,17 @@ export function SplitBillScreen({
               pageRefs.current[totalPages - 1] = el
             }}
             onClick={() => activePageIdx !== totalPages - 1 && scrollToPage(totalPages - 1)}
-            className="flex w-full shrink-0 snap-center justify-center"
+            className={`flex w-full shrink-0 snap-center justify-center transition-all duration-500 ${getSectionStackClass(totalPages - 1)}`}
           >
             <div className={`flex flex-col gap-[14px] ${getCardStackClass(totalPages - 1)}`}>
+              {/* White Blur Layer directly over inactive card so it looks submerged */}
+              {activePageIdx !== totalPages - 1 && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 z-20 rounded-[20px] bg-white/72 backdrop-blur-[5px] transition-opacity duration-300"
+                />
+              )}
+
               {splitMethod === 'per_item' ? (
                 <>
                   {/* Form Tambah Menu Baru */}

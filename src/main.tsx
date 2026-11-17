@@ -7,7 +7,14 @@ document.title = 'Kloop'
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined)
+    // Clear any stale caches from earlier versions so icons & manifest always load fresh
+    if ('caches' in window) {
+      caches.keys().then((keys) => keys.forEach((k) => void caches.delete(k))).catch(() => undefined)
+    }
+    navigator.serviceWorker
+      .register('/sw.js?v=4')
+      .then((reg) => reg.update())
+      .catch(() => undefined)
   })
 }
 
