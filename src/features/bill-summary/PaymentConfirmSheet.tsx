@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Icon, Sheet } from '@/components/ui'
+import { SheetFormSkeleton } from '@/components/skeletons'
+import { Icon, Sheet, useAssetsReady } from '@/components/ui'
 import { MOCK_CURRENT_USER } from '@/services/auth.service'
 import { formatRupiah, verifyPayment } from '@/services/bill.service'
 import type { BillParticipant, PaymentStatus } from '@/types'
@@ -23,6 +24,10 @@ export function PaymentConfirmSheet({
   const [proofUrl, setProofUrl] = useState<string | undefined>(undefined)
   const [submitting, setSubmitting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const ready = useAssetsReady(
+    open && participant ? [participant.avatarUrl, MOCK_CURRENT_USER.qrisUrl ?? ''] : [],
+    260,
+  )
 
   if (!participant) return null
 
@@ -49,8 +54,11 @@ export function PaymentConfirmSheet({
     <Sheet open={open} onClose={onClose} labelledBy="confirm-pay-title">
       <form onSubmit={handleSubmit} className="flex flex-col gap-[16px] p-[20px] pt-[8px] pb-[32px]">
         <div className="mx-auto h-[4px] w-[64px] shrink-0 rounded-[12px] bg-[#dedede]" />
-
-        <div className="flex items-center justify-between gap-[8px] pt-[8px]">
+        {!ready ? (
+          <SheetFormSkeleton rows={3} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-[8px] pt-[8px]">
           <div className="flex min-w-0 items-center gap-[8px]">
             <Icon src={participant.avatarUrl} size={28} round />
             <div className="flex min-w-0 flex-col">
@@ -173,6 +181,8 @@ export function PaymentConfirmSheet({
             {submitting ? 'Memproses...' : 'Konfirmasi Lunas'}
           </button>
         </div>
+          </>
+        )}
       </form>
     </Sheet>
   )

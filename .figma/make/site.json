@@ -1,1 +1,8 @@
-{}
+{
+  "title": "Kloop — Split Bill & Patungan",
+  "description": "Aplikasi Split Bill, Scan Struk OCR, dan Pantau Talangan Bareng Teman.",
+  "language": "id",
+  "icons": {
+    "icon": "/favicon.svg"
+  }
+}

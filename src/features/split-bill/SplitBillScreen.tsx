@@ -32,7 +32,11 @@ export function SplitBillScreen({
   onSaveBill: (input: CreateBillInput) => void
   notify: (msg: string) => void
 }) {
-  const { isLoading } = useSimulatedLoading(true, 800)
+  const splitScreenAssets = useMemo(
+    () => [...Object.values(CIRCLE_AVATARS), ...Object.values(SCAN_ICONS), HOME_IMAGES.dashedLine],
+    [],
+  )
+  const { isLoading } = useSimulatedLoading(true, 650, splitScreenAssets)
   const defaultMethod: SplitMethod = jenis.id === 'flat' ? 'equal' : 'per_item'
   const [splitMethod, setSplitMethod] = useState<SplitMethod>(defaultMethod)
   const [title, setTitle] = useState(initialTitle || (fromScan ? 'Struk hasil scan' : 'Kopi Nako Tembalang'))

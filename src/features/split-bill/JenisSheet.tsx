@@ -1,5 +1,6 @@
-import { Icon, Sheet } from '@/components/ui'
-import { JENIS_OPTIONS, SCAN_ICONS } from '@/services/bill.service'
+import { JenisSheetSkeleton } from '@/components/skeletons'
+import { Icon, Sheet, useAssetsReady } from '@/components/ui'
+import { JENIS_OPTIONS, SCAN_ASSETS, SCAN_ICONS } from '@/services/bill.service'
 import type { InputMode, JenisOption } from '@/types'
 
 export const jenisOptions = JENIS_OPTIONS
@@ -16,6 +17,8 @@ export function JenisSheet({
   onClose: () => void
   onSelect: (j: JenisOption) => void
 }) {
+  const ready = useAssetsReady(open ? SCAN_ASSETS : [], 300)
+
   return (
     <Sheet
       open={open}
@@ -24,40 +27,45 @@ export function JenisSheet({
       className="flex flex-col items-center gap-[16px] px-[16px] pt-[8px] pb-[40px]"
     >
       <div className="h-[4px] w-[64px] shrink-0 rounded-[12px] bg-[#dedede]" />
-      <div className="flex w-full flex-col gap-[24px]">
-        <div className="flex w-full items-center justify-center gap-[10px]">
-          <div className="flex min-w-px flex-1 items-center gap-[6px]">
-            <p id="jenis-title" className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium text-[#054131]">
-              Mau bagi tagihan jenis apa?
-            </p>
-            <div className="flex shrink-0 items-center justify-center rounded-[6px] border border-[#ececec] bg-[#f9f9f9] px-[8px] pb-px">
-              <p className="font-['Outfit:Regular'] text-[14px] leading-[18px] font-normal whitespace-nowrap text-[#054131]">
-                {mode === 'scan' ? 'Scan' : 'Manual'}
+      {!ready ? (
+        <JenisSheetSkeleton />
+      ) : (
+        <div className="flex w-full flex-col gap-[24px]">
+          <div className="flex w-full items-center justify-center gap-[10px]">
+            <div className="flex min-w-px flex-1 items-center gap-[6px]">
+              <p
+                id="jenis-title"
+                className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium text-[#054131]"
+              >
+                Mau bagi tagihan jenis apa?
               </p>
+              <div className="flex shrink-0 items-center justify-center rounded-[6px] border border-[#ececec] bg-[#f9f9f9] px-[8px] pb-px">
+                <p className="font-['Outfit:Regular'] text-[14px] leading-[18px] font-normal whitespace-nowrap text-[#054131]">
+                  {mode === 'scan' ? 'Scan' : 'Manual'}
+                </p>
+              </div>
             </div>
-          </div>
-          <button aria-label="Tutup" onClick={onClose} className="shrink-0 rounded-full transition hover:opacity-80">
-            <Icon src={SCAN_ICONS.close} size={24} />
-          </button>
-        </div>
-        <div className="stagger flex w-full flex-col gap-[12px]">
-          {JENIS_OPTIONS.map((j) => (
-            <button
-              key={j.id}
-              onClick={() => onSelect(j)}
-              className="flex w-full items-center gap-[10px] rounded-[14px] border border-[#ececec] bg-[#fefef8] p-[12px] text-left transition duration-200 hover:border-[#a6bb18] hover:bg-[#f8f8ec] active:scale-[0.99]"
-            >
-              <Icon src={j.icon} size={24} />
-              <span className="flex min-w-px flex-1 flex-col gap-[4px] leading-[normal]">
-                <span className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18]">{j.title}</span>
-                <span className="font-['Outfit:Regular'] text-[12px] font-normal text-[#8e8e8e]">{j.desc}</span>
-              </span>
+            <button aria-label="Tutup" onClick={onClose} className="shrink-0 rounded-full transition hover:opacity-80">
+              <Icon src={SCAN_ICONS.close} size={24} />
             </button>
-          ))}
+          </div>
+          <div className="stagger flex w-full flex-col gap-[12px]">
+            {JENIS_OPTIONS.map((j) => (
+              <button
+                key={j.id}
+                onClick={() => onSelect(j)}
+                className="flex w-full items-center gap-[10px] rounded-[14px] border border-[#ececec] bg-[#fefef8] p-[12px] text-left transition duration-200 hover:border-[#a6bb18] hover:bg-[#f8f8ec] active:scale-[0.99]"
+              >
+                <Icon src={j.icon} size={24} />
+                <span className="flex min-w-px flex-1 flex-col gap-[4px] leading-[normal]">
+                  <span className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18]">{j.title}</span>
+                  <span className="font-['Outfit:Regular'] text-[12px] font-normal text-[#8e8e8e]">{j.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </Sheet>
   )
 }
-
-

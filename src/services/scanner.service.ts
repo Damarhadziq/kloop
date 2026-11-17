@@ -423,6 +423,158 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
   })
 }
 
+/**
+ * Detects the bounding box of the receipt paper inside a canvas and crops/stretches
+ * it so the receipt fills 100% full-screen of the resulting image.
+ */
+function autoCropCanvasToReceiptFullScreen(sourceCanvas: HTMLCanvasElement): string {
+  const sw = sourceCanvas.width
+  const sh = sourceCanvas.height
+  const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx || sw < 64 || sh < 64) {
+    return sourceCanvas.toDataURL('image/jpeg', 0.9)
+  }
+
+  const { data } = ctx.getImageData(0, 0, sw, sh)
+
+  // Compute luminance distribution to find bright paper region vs darker background
+  let lumSum = 0
+  let maxLum = 0
+  const total = sw * sh
+  const lums = new Uint8Array(total)
+
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const l = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2])
+    lums[p] = l
+    lumSum += l
+    if (l > maxLum) maxLum = l
+  }
+
+  const meanLum = lumSum / total
+  // Threshold that separates receipt paper from background
+  const paperThreshold = Math.min(215, Math.max(meanLum * 1.08, meanLum + (maxLum - meanLum) * 0.28))
+
+  let minX = sw
+  let maxX = 0
+  let minY = sh
+  let maxY = 0
+  let paperCount = 0
+
+  // Scan inner 92% to ignore edge vignette artifacts
+  const padX = Math.round(sw * 0.04)
+  const padY = Math.round(sh * 0.04)
+
+  for (let y = padY; y < sh - padY; y += 2) {
+    let rowPaperPixels = 0
+    for (let x = padX; x < sw - padX; x += 2) {
+      if (lums[y * sw + x] >= paperThreshold) {
+        rowPaperPixels++
+      }
+    }
+    // A valid receipt row has a contiguous bright paper band
+    if (rowPaperPixels > (sw / 2) * 0.22) {
+      for (let x = padX; x < sw - padX; x += 2) {
+        if (lums[y * sw + x] >= paperThreshold) {
+          if (x < minX) minX = x
+          if (x > maxX) maxX = x
+          if (y < minY) minY = y
+          if (y > maxY) maxY = y
+          paperCount++
+        }
+      }
+    }
+  }
+
+  const outCanvas = document.createElement('canvas')
+  const outW = 720
+  const outH = 1080
+  outCanvas.width = outW
+  outCanvas.height = outH
+  const outCtx = outCanvas.getContext('2d')
+  if (!outCtx) return sourceCanvas.toDataURL('image/jpeg', 0.9)
+
+  const detectedW = maxX - minX
+  const detectedH = maxY - minY
+  const hasValidReceiptBounds =
+    paperCount > total * 0.03 &&
+    detectedW >= sw * 0.28 &&
+    detectedH >= sh * 0.32 &&
+    (detectedW < sw * 0.94 || detectedH < sh * 0.94)
+
+  if (hasValidReceiptBounds) {
+    const marginX = Math.round(detectedW * 0.02)
+    const marginY = Math.round(detectedH * 0.02)
+    const cropX = Math.max(0, minX - marginX)
+    const cropY = Math.max(0, minY - marginY)
+    const cropW = Math.min(sw - cropX, detectedW + marginX * 2)
+    const cropH = Math.min(sh - cropY, detectedH + marginY * 2)
+
+    outCtx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
+  } else {
+    // Already framed tightly inside the viewfinder box: fill 100% full-screen
+    outCtx.drawImage(sourceCanvas, 0, 0, sw, sh, 0, 0, outW, outH)
+  }
+
+  return outCanvas.toDataURL('image/jpeg', 0.9)
+}
+
+/**
+ * Captures the exact visible viewfinder region from `<video>` (`object-cover` crop)
+ * and automatically crops the receipt paper to full-screen.
+ */
+export function captureAndAutoCropVideo(
+  video: HTMLVideoElement,
+  viewfinderWidth: number,
+  viewfinderHeight: number,
+): string {
+  const vw = video.videoWidth || 720
+  const vh = video.videoHeight || 1080
+  const targetRatio =
+    viewfinderWidth > 0 && viewfinderHeight > 0 ? viewfinderWidth / viewfinderHeight : 720 / 1080
+  const videoRatio = vw / vh
+
+  let sx = 0
+  let sy = 0
+  let sw = vw
+  let sh = vh
+
+  // Match CSS object-cover crop of the viewfinder box
+  if (videoRatio > targetRatio) {
+    sw = Math.round(vh * targetRatio)
+    sx = Math.round((vw - sw) / 2)
+  } else {
+    sh = Math.round(vw / targetRatio)
+    sy = Math.round((vh - sh) / 2)
+  }
+
+  const frameCanvas = document.createElement('canvas')
+  frameCanvas.width = sw
+  frameCanvas.height = sh
+  const ctx = frameCanvas.getContext('2d')
+  ctx?.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
+
+  return autoCropCanvasToReceiptFullScreen(frameCanvas)
+}
+
+/**
+ * Auto-crops an uploaded image file/URL so the receipt fills full-screen.
+ */
+export async function autoCropUploadedReceiptImage(imageSrc: string): Promise<string> {
+  try {
+    const img = await loadImageElement(imageSrc)
+    const w = img.naturalWidth || img.width || 720
+    const h = img.naturalHeight || img.height || 1080
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx?.drawImage(img, 0, 0, w, h)
+    return autoCropCanvasToReceiptFullScreen(canvas)
+  } catch {
+    return imageSrc
+  }
+}
+
 export function createReceiptDraftForCategory(
   category: string,
   participantIds: string[],

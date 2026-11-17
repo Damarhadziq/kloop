@@ -8,12 +8,14 @@ export function ProfileMenu({
   onToggle,
   onClose,
   session,
+  onOpenInstall,
   onLogout,
 }: {
   open: boolean
   onToggle: () => void
   onClose: () => void
   session: Session
+  onOpenInstall: () => void
   onLogout: () => void
 }) {
   const { mounted, closing } = usePresence(open, 180)
@@ -61,8 +63,21 @@ export function ProfileMenu({
           <div className="h-px bg-[#ececec]" />
           <button
             role="menuitem"
+            onClick={() => {
+              onClose()
+              onOpenInstall()
+            }}
+            className="mt-[6px] flex w-full items-center justify-between rounded-[8px] px-[10px] py-[8px] text-left font-['Outfit:Medium'] text-[13px] font-medium text-[#054131] transition-colors duration-200 hover:bg-[#f2f3e6]"
+          >
+            <span>Download Aplikasi</span>
+            <span className="rounded-[4px] bg-[#f2f3e6] px-[6px] py-[1px] font-['Outfit:Regular'] text-[11px] text-[#a6bb18]">
+              iOS/Android
+            </span>
+          </button>
+          <button
+            role="menuitem"
             onClick={onLogout}
-            className="mt-[6px] w-full rounded-[8px] px-[10px] py-[8px] text-left font-['Outfit:Regular'] text-[14px] text-[#d14343] transition-colors duration-200 hover:bg-[#fdf1f1]"
+            className="mt-[2px] w-full rounded-[8px] px-[10px] py-[8px] text-left font-['Outfit:Regular'] text-[14px] text-[#d14343] transition-colors duration-200 hover:bg-[#fdf1f1]"
           >
             Keluar
           </button>

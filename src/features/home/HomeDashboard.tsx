@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HomeDashboardSkeleton } from '@/components/skeletons'
-import { Icon, screenClass, useSwitch } from '@/components/ui'
+import { Icon, preloadImages, screenClass, useSwitch } from '@/components/ui'
 import { BillSummaryScreen } from '@/features/bill-summary'
 import {
   JenisSheet,
@@ -13,9 +13,11 @@ import {
 } from '@/features/split-bill'
 import {
   CIRCLE_AVATARS,
+  HOME_ASSETS,
   HOME_IMAGES,
   INITIAL_BILLS,
   INITIAL_TALANGAN,
+  SCAN_ASSETS,
   createBill,
   formatRupiah,
   getActiveBills,
@@ -26,6 +28,7 @@ import type { Bill, InputMode, PaymentStatus, ReceiptScanAnalysisResult, Session
 import { ActiveBillCard } from './ActiveBillCard'
 import { CircleSection } from './CircleSection'
 import { HeroActionCard } from './HeroActionCard'
+import { InstallAppSheet } from './InstallAppSheet'
 import { ProfileMenu } from './ProfileMenu'
 import { StatusTalanganCard } from './StatusTalanganCard'
 
@@ -55,6 +58,7 @@ export function HomeDashboard({
   const [jenis, setJenis] = useState<Jenis>(jenisOptions[0])
   const [screen, setScreen] = useState<AppScreen>('home')
   const [profileOpen, setProfileOpen] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
   const [tagihanPaid, setTagihanPaid] = useState(false)
 
   const [selectedBillId, setSelectedBillId] = useState<string>(INITIAL_BILLS[0].id)
@@ -68,11 +72,14 @@ export function HomeDashboard({
   const [scanAnalysis, setScanAnalysis] = useState<ReceiptScanAnalysisResult | null>(null)
   const { shown: shownScreen, leaving } = useSwitch(screen)
 
-  // Fetch initial dashboard data via service with simulated skeleton delay (750ms)
+  // Fetch initial dashboard data AND wait for 100% of home & bottom-sheet assets before hiding skeleton
   useEffect(() => {
     let alive = true
     setIsLoadingDashboard(true)
-    getActiveBills(750).then((data) => {
+    Promise.all([
+      getActiveBills(650),
+      preloadImages([...HOME_ASSETS, ...SCAN_ASSETS]),
+    ]).then(([data]) => {
       if (!alive) return
       setBills(data)
       setIsLoadingDashboard(false)
@@ -275,6 +282,7 @@ export function HomeDashboard({
             onToggle={() => setProfileOpen((o) => !o)}
             onClose={() => setProfileOpen(false)}
             session={session}
+            onOpenInstall={() => setInstallOpen(true)}
             onLogout={onLogout}
           />
           <p className="font-['Courgette:Regular'] text-[26px] leading-[normal] tracking-[-0.3px] whitespace-nowrap text-[#054131]">
@@ -377,6 +385,8 @@ export function HomeDashboard({
       />
 
       <JenisSheet open={jenisOpen} mode={jenisMode} onClose={() => setJenisOpen(false)} onSelect={selectJenis} />
+
+      <InstallAppSheet open={installOpen} onClose={() => setInstallOpen(false)} notify={setToast} />
     </div>
   )
 }

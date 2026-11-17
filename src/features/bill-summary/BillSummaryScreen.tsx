@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BillSummarySkeleton, useSimulatedLoading } from '@/components/skeletons'
 import { Badge, Icon, Img } from '@/components/ui'
 import { ScanRoundButton } from '@/features/split-bill'
@@ -24,7 +24,18 @@ export function BillSummaryScreen({
   onConfirmPayment: (billId: string, name: string, status: PaymentStatus, proofUrl?: string) => void
   notify: (msg: string) => void
 }) {
-  const { isLoading } = useSimulatedLoading(true, 750)
+  const summaryAssets = useMemo(
+    () => [
+      ...bill.participants.map((p) => p.avatarUrl),
+      HOME_IMAGES.chefHat,
+      HOME_IMAGES.dashedLine,
+      HOME_IMAGES.verified,
+      HOME_IMAGES.bellSmall,
+      SCAN_ICONS.back,
+    ],
+    [bill.participants],
+  )
+  const { isLoading } = useSimulatedLoading(true, 600, summaryAssets)
   const [selectedParticipant, setSelectedParticipant] = useState<BillParticipant | null>(null)
 
   const paidCount = bill.participants.filter((p) => p.paid).length
