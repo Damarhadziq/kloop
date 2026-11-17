@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ScanResultSkeleton, useSimulatedLoading } from '@/components/skeletons'
-import { Badge, ConfirmModal, Icon, Img, KLOOP_LOGO, usePresence, useScrollBarOnScroll } from '@/components/ui'
+import { ConfirmModal, Icon, Img, KLOOP_LOGO, PrimaryButton, usePresence, useScrollBarOnScroll } from '@/components/ui'
 import {
   CIRCLE_AVATARS,
   HOME_IMAGES,
@@ -60,11 +60,18 @@ export function SplitBillScreen({
 
   // Full-page view index:
   // Page 0 = Nama Tempat & Siapa Aja yang Ikut Patungan
-  // Page 1..items.length = Menu 1..N (or Bagi Rata card if splitMethod === 'equal')
+  // Page 1..items.length = Menu 1..N (when splitMethod === 'per_item')
   // Last Page = Pajak, Tambah Menu & Ringkasan Pembagian
   const [activePageIdx, setActivePageIdx] = useState(0)
   const [menuListOpen, setMenuListOpen] = useState(false)
   const { mounted: menuListMounted, closing: menuListClosing } = usePresence(menuListOpen, 180)
+
+  // Floating menu state on the right-side vertical ellipse rail
+  const [floatRailExpanded, setFloatRailExpanded] = useState(false)
+  const [activeFloatToastVisible, setActiveFloatToastVisible] = useState(true)
+  const floatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const railRef = useRef<HTMLDivElement>(null)
+
   const menuPopoverRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -115,6 +122,7 @@ export function SplitBillScreen({
     }
   }, [fromScan, jenis.title, availableFriends, initialTitle, initialTotal])
 
+  // Close top-right popover on outside click
   useEffect(() => {
     if (!menuListOpen) return
     const onDown = (e: PointerEvent) => !menuPopoverRef.current?.contains(e.target as Node) && setMenuListOpen(false)
@@ -127,7 +135,56 @@ export function SplitBillScreen({
     }
   }, [menuListOpen])
 
-  const totalPages = splitMethod === 'per_item' ? items.length + 2 : 2
+  // Close expanded float rail when tapping outside
+  useEffect(() => {
+    if (!floatRailExpanded) return
+    const onDown = (e: PointerEvent) => !railRef.current?.contains(e.target as Node) && setFloatRailExpanded(false)
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [floatRailExpanded])
+
+  // Briefly reveal the active ellipse's floating badge whenever activePageIdx changes
+  useEffect(() => {
+    setActiveFloatToastVisible(true)
+    if (floatTimerRef.current) clearTimeout(floatTimerRef.current)
+    floatTimerRef.current = setTimeout(() => {
+      setActiveFloatToastVisible(false)
+    }, 1800)
+    return () => {
+      if (floatTimerRef.current) clearTimeout(floatTimerRef.current)
+    }
+  }, [activePageIdx])
+
+  const pageMetaList = useMemo(() => {
+    const list: { index: number; shortTitle: string; subtitle: string }[] = [
+      {
+        index: 0,
+        shortTitle: 'Tempat & Teman',
+        subtitle: `${selectedFriends.length} teman`,
+      },
+    ]
+    if (splitMethod === 'per_item') {
+      items.forEach((it, idx) => {
+        list.push({
+          index: idx + 1,
+          shortTitle: it.name || `Menu ${idx + 1}`,
+          subtitle: formatRupiah(it.price),
+        })
+      })
+    }
+    list.push({
+      index: list.length,
+      shortTitle: 'Ringkasan & Simpan',
+      subtitle: formatRupiah(
+        splitMethod === 'equal'
+          ? Number(equalTotalInput.replace(/\D/g, '')) || 0
+          : Math.max(0, items.reduce((a, b) => a + b.price, 0) + taxAmount + serviceAmount - discountAmount),
+      ),
+    })
+    return list
+  }, [selectedFriends.length, splitMethod, items, equalTotalInput, taxAmount, serviceAmount, discountAmount])
+
+  const totalPages = pageMetaList.length
 
   const scrollToPage = (pageIdx: number) => {
     const clamped = Math.max(0, Math.min(totalPages - 1, pageIdx))
@@ -342,6 +399,12 @@ export function SplitBillScreen({
     })
   }
 
+  // Standard Login-page consistent input & label classes
+  const labelTextClass =
+    "font-['Outfit:Regular'] text-[16px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]"
+  const inputBoxClass =
+    "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[14px] font-['Outfit:Regular'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+
   if (isLoading) {
     return (
       <div className="min-h-dvh w-full bg-white text-[#054131]">
@@ -353,44 +416,38 @@ export function SplitBillScreen({
   }
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-white text-[#054131]">
+    <div className="relative flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-white text-[#054131]">
       {/* Faded Kloop Logo Watermark in Center Background */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center select-none"
+        className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center select-none"
       >
-        <img
-          src={KLOOP_LOGO}
-          alt=""
-          className="w-[240px] max-w-[62vw] opacity-[0.06] md:w-[290px]"
-        />
+        <img src={KLOOP_LOGO} alt="" className="w-[240px] max-w-[62vw] opacity-[0.06] md:w-[290px]" />
       </div>
 
-      {/* Top White Blur Layer + Floating Header */}
-      <div className=" fixed inset-x-0 top-0 z-30 bg-gradient-to-b from-white via-white/92 to-transparent pt-[20px] pb-[18px] backdrop-blur-[2px] md:pt-[28px]">
-        <header className="mx-auto flex w-full max-w-[560px] items-center justify-between gap-[10px] px-[16px]">
+      {/* Top Header with White Blur Layer */}
+      <div className="relative z-30 shrink-0 bg-gradient-to-b from-white via-white/95 to-transparent px-[16px] pt-[20px] pb-[12px] backdrop-blur-[2px] md:pt-[28px]">
+        <header className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
-          <div className="flex min-w-0 flex-1 items-center justify-center gap-[6px]">
-            <h1 className="truncate font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
-              Atur Pembagian
-            </h1>
-            <Badge>{jenis.title}</Badge>
-          </div>
 
-          {/* Top-Right Menu List Popover Trigger */}
+          <h1 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
+            Atur Pembagian
+          </h1>
+
+          {/* Top-Right Icon-Only Button with Circular Menu Count Badge */}
           <div ref={menuPopoverRef} className="relative shrink-0">
             <button
               type="button"
               aria-label="Daftar menu pesanan"
               aria-expanded={menuListOpen}
               onClick={() => setMenuListOpen((o) => !o)}
-              className={`flex items-center gap-[6px] rounded-full border px-[11px] py-[7px] font-['Outfit:Medium'] text-[12px] font-medium transition active:scale-95 ${
+              className={`relative flex size-[40px] items-center justify-center rounded-full transition active:scale-95 ${
                 menuListOpen
-                  ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131]'
-                  : 'border-[#ececec] bg-[#f8f8ec] text-[#054131] hover:bg-[#eef0d6]'
+                  ? 'bg-[#a6bb18]/25 ring-2 ring-[#a6bb18]'
+                  : 'bg-[#f8f8ec] hover:bg-[#eef0d6]'
               }`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden className="text-[#a6bb18]">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden className="text-[#054131]">
                 <path
                   d="M9 6H20M9 12H20M9 18H20M4.5 6H4.51M4.5 12H4.51M4.5 18H4.51"
                   stroke="currentColor"
@@ -399,54 +456,31 @@ export function SplitBillScreen({
                   strokeLinejoin="round"
                 />
               </svg>
-              <span className="tabular-nums">{items.length} Menu</span>
+              <span className="absolute -top-[3px] -right-[3px] flex size-[19px] items-center justify-center rounded-full bg-[#a6bb18] font-['Outfit:SemiBold'] text-[11px] font-semibold text-white ring-2 ring-white tabular-nums">
+                {items.length}
+              </span>
             </button>
 
             {menuListMounted && (
               <div
                 role="dialog"
-                aria-label="Daftar semua halaman & menu"
-                className={`absolute top-[46px] right-0 z-40 flex w-[288px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
+                aria-label="Daftar menu"
+                className={`absolute top-[48px] right-0 z-40 flex w-[272px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
                   menuListClosing
                     ? '[animation:menu-out_180ms_ease-in_forwards]'
                     : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
                 }`}
               >
                 <div className="flex items-center justify-between border-b border-[#ececec] pb-[8px]">
-                  <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
-                    Navigasi & Daftar Menu ({items.length})
+                  <span className="font-['Outfit:Medium'] text-[14px] font-medium text-[#054131]">
+                    Daftar Menu ({items.length})
                   </span>
-                  <span className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">Ketuk untuk lompat</span>
+                  <span className="font-['Outfit:SemiBold'] text-[13px] font-semibold tabular-nums text-[#a6bb18]">
+                    {formatRupiah(grandTotal)}
+                  </span>
                 </div>
 
-                <div className="flex max-h-[250px] flex-col gap-[6px] overflow-y-auto pr-[2px]">
-                  {/* Page 0: Info Tempat & Teman */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      scrollToPage(0)
-                      setMenuListOpen(false)
-                    }}
-                    className={`flex w-full items-center justify-between gap-[8px] rounded-[10px] border px-[10px] py-[8px] text-left transition ${
-                      activePageIdx === 0
-                        ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131]'
-                        : 'border-[#ececec] bg-[#fefef8] text-[#054131] hover:border-[#a6bb18]'
-                    }`}
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
-                      <p className="truncate font-['Outfit:Medium'] text-[13px] font-medium">
-                        Info Tempat & Teman
-                      </p>
-                      <p className="truncate font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                        {title || 'Nama tempat'} • {selectedFriends.length} teman ikut
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-[4px] bg-white px-[6px] py-[2px] font-['Outfit:Regular'] text-[10px] text-[#8e8e8e]">
-                      Awal
-                    </span>
-                  </button>
-
-                  {/* Menu Pages */}
+                <div className="flex max-h-[240px] flex-col gap-[6px] overflow-y-auto pr-[2px]">
                   {items.map((it, idx) => {
                     const pageNumber = idx + 1
                     const isCurrent = activePageIdx === pageNumber && splitMethod === 'per_item'
@@ -467,7 +501,7 @@ export function SplitBillScreen({
                       >
                         <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
                           <p className="truncate font-['Outfit:Medium'] text-[13px] font-medium">
-                            Menu #{idx + 1}: {it.name || 'Menu Tanpa Nama'}
+                            {idx + 1}. {it.name || 'Menu'}
                           </p>
                           <p className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
                             {it.qty}x • {it.assignedParticipantIds.length} teman
@@ -487,9 +521,9 @@ export function SplitBillScreen({
                     scrollToPage(totalPages - 1)
                     setMenuListOpen(false)
                   }}
-                  className="mt-[2px] flex w-full items-center justify-center gap-[6px] rounded-[8px] bg-[#f2f3e6] py-[8px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
+                  className="mt-[2px] flex w-full items-center justify-center rounded-[10px] bg-[#f2f3e6] py-[9px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
                 >
-                  <span>+ Tambah Menu, Pajak & Ringkasan</span>
+                  Ringkasan & Pajak
                 </button>
               </div>
             )}
@@ -497,466 +531,430 @@ export function SplitBillScreen({
         </header>
       </div>
 
-      {/* Full-Viewport Vertical Scroll-Snap Pages (1 Centered Card per Page View) */}
-      <div
-        ref={pageScrollRef}
-        onScroll={handleViewportScroll}
-        className="snap-page-scroll relative z-10 h-dvh w-full snap-y snap-mandatory overflow-y-auto scroll-smooth"
-      >
-        {/* PAGE 0 (SCROLL AWAL): Nama Tempat & Siapa Aja yang Ikut Patungan */}
-        <section
-          ref={(el) => {
-            pageRefs.current[0] = el as HTMLDivElement | null
-          }}
-          className="flex min-h-dvh w-full snap-center items-center justify-center px-[16px] pt-[84px] pb-[96px]"
+      {/* Main Full-View Paged Scroll Area */}
+      <div className="relative flex-1 min-h-0 w-full">
+        {/* Top Soft White Blur Layer over Scroll Viewport */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[28px] bg-gradient-to-b from-white via-white/80 to-transparent backdrop-blur-[1.5px]"
+        />
+
+        {/* Bottom Soft White Blur Layer over Scroll Viewport */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[36px] bg-gradient-to-t from-white via-white/85 to-transparent backdrop-blur-[1.5px]"
+        />
+
+        {/* Right-Side Vertical Ellipse Progress & Interactive Float Menu */}
+        <div
+          ref={railRef}
+          onMouseEnter={() => setFloatRailExpanded(true)}
+          onMouseLeave={() => setFloatRailExpanded(false)}
+          className="absolute top-1/2 right-[8px] z-30 flex -translate-y-1/2 flex-col items-end gap-[10px] md:right-[16px]"
         >
-          <div className="flex w-full max-w-[520px] flex-col gap-[18px] rounded-[20px] border border-[#ececec] bg-white/92 p-[18px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
-            <div className="flex items-center justify-between">
-              <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[3px] font-['Outfit:Medium'] text-[11px] font-medium text-[#a6bb18]">
-                Langkah Awal • Tempat & Teman
-              </span>
-              <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                Halaman 1 / {totalPages}
-              </span>
-            </div>
+          {pageMetaList.map((meta) => {
+            const isActive = activePageIdx === meta.index
+            const showFloatPill = floatRailExpanded || (isActive && activeFloatToastVisible)
 
-            <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-              Nama tempat / tagihan
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="cth. Kopi Nako Tembalang"
-                className="w-full truncate rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[11px] font-['Outfit:Medium'] text-[15px] font-medium text-[#054131] outline-none transition focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
-              />
-            </label>
-
-            {/* Metode Pembagian */}
-            <div className="flex flex-col gap-[6px]">
-              <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">Metode pembagian</span>
-              <div
-                role="tablist"
-                aria-label="Metode pembagian tagihan"
-                className="grid grid-cols-2 gap-[8px] rounded-[10px] border border-[#ececec] bg-[#fefef8] p-[5px]"
-              >
-                {(
-                  [
-                    { key: 'per_item', label: 'Per Menu' },
-                    { key: 'equal', label: 'Bagi Rata' },
-                  ] as const
-                ).map((tab) => {
-                  const active = splitMethod === tab.key
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => {
-                        setSplitMethod(tab.key)
-                        if (tab.key === 'equal') {
-                          setEqualTotalInput(String(itemsSubtotal + taxAmount + serviceAmount - discountAmount))
-                        }
-                      }}
-                      className={`flex items-center justify-center gap-[6px] rounded-[8px] py-[8px] px-[12px] font-['Outfit:Medium'] text-[13px] font-medium transition-colors duration-200 ${
-                        active ? 'bg-[#a6bb18] text-white' : 'bg-transparent text-[#8e8e8e] hover:bg-white'
+            return (
+              <div key={meta.index} className="relative flex items-center justify-end">
+                {/* Animated Floating Menu Pill per Ellipse */}
+                {showFloatPill && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      scrollToPage(meta.index)
+                      setFloatRailExpanded((prev) => !prev)
+                    }}
+                    style={{ animationDelay: floatRailExpanded ? `${meta.index * 35}ms` : '0ms' }}
+                    className={`mr-[8px] flex max-w-[176px] items-center gap-[6px] rounded-full border px-[10px] py-[5px] text-left shadow-[0_8px_20px_rgba(5,65,49,0.12)] backdrop-blur-md transition [animation:float-pill-in_220ms_cubic-bezier(0.2,0.8,0.2,1)_both] ${
+                      isActive
+                        ? 'border-[#a6bb18] bg-[#054131] text-white'
+                        : 'border-[#ececec] bg-white/95 text-[#054131] hover:border-[#a6bb18]'
+                    }`}
+                  >
+                    <span
+                      className={`size-[6px] shrink-0 rounded-full ${
+                        isActive ? 'bg-[#a6bb18]' : 'bg-[#dedede]'
                       }`}
-                    >
-                      {tab.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+                    />
+                    <span className="truncate font-['Outfit:Medium'] text-[11px] font-medium">
+                      {meta.shortTitle}
+                    </span>
+                  </button>
+                )}
 
-            {/* Siapa Aja yang Ikut Patungan Disini */}
-            <div className="flex flex-col gap-[8px]">
-              <div className="flex items-center justify-between">
-                <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                  Siapa aja yang ikut patungan? ({selectedFriends.length} dipilih)
-                </span>
+                {/* Vertical Ellipse Dot */}
                 <button
                   type="button"
-                  onClick={() => setSelectedFriends([...availableFriends])}
-                  className="font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] hover:underline"
+                  aria-label={meta.shortTitle}
+                  aria-current={isActive ? 'step' : undefined}
+                  onClick={() => {
+                    if (isActive) {
+                      setFloatRailExpanded((e) => !e)
+                    } else {
+                      scrollToPage(meta.index)
+                      setFloatRailExpanded(true)
+                    }
+                  }}
+                  className="group flex items-center justify-center p-[3px]"
                 >
-                  Pilih Semua
+                  <span
+                    className={`block rounded-full transition-all duration-300 ${
+                      isActive
+                        ? 'h-[24px] w-[8px] bg-[#a6bb18] shadow-[0_0_10px_rgba(166,187,24,0.45)]'
+                        : 'h-[8px] w-[8px] bg-[#dedede] group-hover:bg-[#a6bb18]/60'
+                    }`}
+                  />
                 </button>
               </div>
-              <div
-                onScroll={onFriendChipScroll}
-                className={`flex flex-wrap gap-[8px] ${friendChipScrollClass}`}
-              >
-                {availableFriends.map((friend) => {
-                  const active = selectedFriends.includes(friend)
-                  return (
-                    <button
-                      key={friend}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => toggleFriendInBill(friend)}
-                      className={`flex max-w-[128px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[5px] transition duration-200 active:scale-95 ${
-                        active
-                          ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
-                          : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
-                      <span className="truncate font-['Outfit:Regular'] text-[12px]">{friend}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => scrollToPage(1)}
-              className="mt-[2px] flex w-full items-center justify-center gap-[6px] rounded-[10px] bg-[#f2f3e6] py-[10px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.99]"
-            >
-              <span>
-                {splitMethod === 'per_item'
-                  ? `Scroll ke bawah ↓ untuk Menu 1 (${items.length} menu)`
-                  : 'Scroll ke bawah ↓ untuk Total Bagi Rata'}
-              </span>
-            </button>
-          </div>
-        </section>
-
-        {/* PAGES 1..N: 1 Menu = 1 Full Page View (Centered Single Card) */}
-        {splitMethod === 'per_item' &&
-          items.map((item, idx) => {
-            const pageIndex = idx + 1
-            return (
-              <section
-                key={item.id}
-                ref={(el) => {
-                  pageRefs.current[pageIndex] = el as HTMLDivElement | null
-                }}
-                className="flex min-h-dvh w-full snap-center items-center justify-center px-[16px] pt-[84px] pb-[96px]"
-              >
-                <div className="flex w-full max-w-[520px] flex-col gap-[16px] rounded-[20px] border border-[#ececec] bg-white/92 p-[18px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
-                  <div className="flex items-center justify-between gap-[8px]">
-                    <div className="flex items-center gap-[8px]">
-                      <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[3px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18]">
-                        Menu {idx + 1} dari {items.length}
-                      </span>
-                      <span className="truncate font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                        {title}
-                      </span>
-                    </div>
-                    {items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => requestRemoveItem(item)}
-                        className="rounded-[6px] px-[8px] py-[3px] font-['Outfit:Regular'] text-[12px] text-[#e5484d] transition hover:bg-[#fdf1f1]"
-                      >
-                        Hapus Menu
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Nama Menu & Qty + Harga */}
-                  <div className="flex flex-col gap-[12px]">
-                    <label className="flex flex-col gap-[5px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                      Nama Menu Pesanan
-                      <input
-                        value={item.name}
-                        onChange={(e) => updateItemName(item.id, e.target.value)}
-                        placeholder="Nama menu"
-                        className="w-full truncate rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] font-['Outfit:Medium'] text-[16px] font-medium text-[#054131] outline-none focus:border-[#a6bb18]"
-                      />
-                    </label>
-
-                    <div className="flex items-end justify-between gap-[12px]">
-                      <div className="flex flex-col gap-[5px]">
-                        <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">Jumlah</span>
-                        <div className="flex items-center gap-[10px] rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px]">
-                          <button
-                            type="button"
-                            aria-label={`Kurangi jumlah ${item.name}`}
-                            onClick={() => updateItemQty(item.id, -1)}
-                            className="px-[6px] font-['Outfit:SemiBold'] text-[16px] text-[#054131] hover:text-[#a6bb18]"
-                          >
-                            −
-                          </button>
-                          <span className="font-['Outfit:Medium'] text-[14px] font-medium tabular-nums text-[#054131]">
-                            {item.qty}x
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={`Tambah jumlah ${item.name}`}
-                            onClick={() => updateItemQty(item.id, 1)}
-                            className="px-[6px] font-['Outfit:SemiBold'] text-[16px] text-[#054131] hover:text-[#a6bb18]"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-
-                      <label className="flex min-w-0 flex-1 flex-col gap-[5px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                        Total Harga Menu (Rp)
-                        <input
-                          inputMode="numeric"
-                          value={item.price || ''}
-                          onChange={(e) => updateItemPrice(item.id, e.target.value)}
-                          className="w-full rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[9px] text-right font-['Outfit:SemiBold'] text-[17px] font-semibold tabular-nums text-[#054131] outline-none focus:border-[#a6bb18]"
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="relative h-0 w-full">
-                    <div className="absolute inset-[-1px_0_0_0]">
-                      <img alt="" className="block size-full max-w-none" src={HOME_IMAGES.dashedLine} />
-                    </div>
-                  </div>
-
-                  {/* Pilih Avatar Teman untuk Menu Ini */}
-                  <div className="flex flex-col gap-[10px]">
-                    <div className="flex items-center justify-between">
-                      <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                        Siapa yang pesan menu ini? ({item.assignedParticipantIds.length} teman)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => assignAllToItem(item.id)}
-                        className="font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] hover:underline"
-                      >
-                        Pilih Semua
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-[8px]">
-                      {selectedFriends.map((friend) => {
-                        const assigned = item.assignedParticipantIds.includes(friend)
-                        return (
-                          <button
-                            key={friend}
-                            type="button"
-                            aria-pressed={assigned}
-                            onClick={() => toggleFriendOnItem(item.id, friend)}
-                            className={`flex max-w-[124px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[6px] transition duration-150 active:scale-95 ${
-                              assigned
-                                ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
-                                : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-65 hover:opacity-100'
-                            }`}
-                          >
-                            <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
-                            <span className="truncate font-['Outfit:Regular'] text-[12px]">{friend}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Quick Next/Prev Step Footer inside Card */}
-                  <div className="flex items-center justify-between border-t border-[#ececec] pt-[10px] text-[12px]">
-                    <button
-                      type="button"
-                      onClick={() => scrollToPage(pageIndex - 1)}
-                      className="font-['Outfit:Regular'] text-[#8e8e8e] hover:text-[#054131]"
-                    >
-                      ↑ Sebelumnya
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => scrollToPage(pageIndex + 1)}
-                      className="font-['Outfit:Medium'] font-medium text-[#a6bb18] hover:underline"
-                    >
-                      {idx < items.length - 1 ? `Menu ${idx + 2} ↓` : 'Pajak & Ringkasan ↓'}
-                    </button>
-                  </div>
-                </div>
-              </section>
             )
           })}
+        </div>
 
-        {/* FINAL PAGE: Pajak, Tambah Menu Baru & Ringkasan Pembagian (or Bagi Rata Final Card) */}
-        <section
-          ref={(el) => {
-            pageRefs.current[totalPages - 1] = el as HTMLDivElement | null
-          }}
-          className="flex min-h-dvh w-full snap-center items-center justify-center px-[16px] pt-[84px] pb-[96px]"
+        {/* Full-Page Scroll Container */}
+        <div
+          ref={pageScrollRef}
+          onScroll={handleViewportScroll}
+          className="snap-page-scroll relative z-10 h-full w-full snap-y snap-mandatory overflow-y-auto scroll-smooth"
         >
-          <div className="flex w-full max-w-[520px] flex-col gap-[14px] rounded-[20px] border border-[#ececec] bg-white/92 p-[18px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
-            <div className="flex items-center justify-between">
-              <span className="rounded-[6px] bg-[#f2f3e6] px-[8px] py-[3px] font-['Outfit:Medium'] text-[11px] font-medium text-[#a6bb18]">
-                {splitMethod === 'per_item' ? 'Pajak, Menu Baru & Ringkasan' : 'Nominal Bagi Rata & Ringkasan'}
-              </span>
-              <span className="font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                Halaman {totalPages} / {totalPages}
-              </span>
-            </div>
+          {/* PAGE 0: Nama Tempat & Siapa Aja yang Ikut Patungan */}
+          <section
+            ref={(el) => {
+              pageRefs.current[0] = el as HTMLDivElement | null
+            }}
+            className="flex h-full min-h-full w-full snap-center items-center justify-center px-[16px] pr-[28px] py-[16px]"
+          >
+            <div className="flex w-full max-w-[480px] flex-col gap-[20px] rounded-[20px] border border-[#ececec] bg-white/92 p-[20px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+              <label className="flex w-full flex-col gap-[10px]">
+                <span className={labelTextClass}>Nama Tempat / Tagihan</span>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Masukkan nama tempat"
+                  className={inputBoxClass}
+                />
+              </label>
 
-            {splitMethod === 'per_item' ? (
-              <>
-                {/* Form Tambah Menu Baru */}
-                <form
-                  onSubmit={handleAddItem}
-                  className="flex flex-col gap-[8px] rounded-[12px] border border-dashed border-[#dedede] bg-[#fefef8] p-[12px]"
+              {/* Metode Pembagian */}
+              <div className="flex w-full flex-col gap-[10px]">
+                <span className={labelTextClass}>Metode Pembagian</span>
+                <div
+                  role="tablist"
+                  aria-label="Metode pembagian tagihan"
+                  className="grid grid-cols-2 gap-[8px] rounded-[12px] border border-[#ececec] bg-[#fefef8] p-[6px]"
                 >
-                  <p className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
-                    + Tambah Menu Lainnya
-                  </p>
-                  <div className="grid grid-cols-12 gap-[8px]">
-                    <input
-                      value={newItemName}
-                      onChange={(e) => setNewItemName(e.target.value)}
-                      placeholder="Nama menu baru"
-                      className="col-span-6 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[7px] font-['Outfit:Regular'] text-[12px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                    />
-                    <input
-                      value={newItemQty}
-                      onChange={(e) => setNewItemQty(e.target.value)}
-                      inputMode="numeric"
-                      placeholder="Qty"
-                      className="col-span-2 rounded-[8px] border border-[#ececec] bg-white px-[8px] py-[7px] font-['Outfit:Regular'] text-[12px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                    />
-                    <input
-                      value={newItemPrice}
-                      onChange={(e) => setNewItemPrice(e.target.value)}
-                      inputMode="numeric"
-                      placeholder="Harga (Rp)"
-                      className="col-span-4 rounded-[8px] border border-[#ececec] bg-white px-[10px] py-[7px] font-['Outfit:Regular'] text-[12px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="self-end rounded-[8px] bg-[#f2f3e6] px-[12px] py-[6px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
-                  >
-                    + Tambah & Buka Halaman Menu
-                  </button>
-                </form>
-
-                {/* Pajak & Service */}
-                <div className="grid grid-cols-2 gap-[10px]">
-                  <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                    Pajak / PPN (Rp)
-                    <input
-                      inputMode="numeric"
-                      value={taxAmount || ''}
-                      placeholder="0"
-                      onChange={(e) => setTaxAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
-                      className="rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-[4px] font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                    Service Charge (Rp)
-                    <input
-                      inputMode="numeric"
-                      value={serviceAmount || ''}
-                      placeholder="0"
-                      onChange={(e) => setServiceAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
-                      className="rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                    />
-                  </label>
+                  {(
+                    [
+                      { key: 'per_item', label: 'Per Menu' },
+                      { key: 'equal', label: 'Bagi Rata' },
+                    ] as const
+                  ).map((tab) => {
+                    const active = splitMethod === tab.key
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => {
+                          setSplitMethod(tab.key)
+                          if (tab.key === 'equal') {
+                            setEqualTotalInput(String(itemsSubtotal + taxAmount + serviceAmount - discountAmount))
+                          }
+                        }}
+                        className={`flex h-[40px] items-center justify-center rounded-[8px] px-[12px] font-['Outfit:Medium'] text-[14px] font-medium transition-colors duration-200 ${
+                          active ? 'bg-[#a6bb18] text-white' : 'bg-transparent text-[#8e8e8e] hover:bg-white'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    )
+                  })}
                 </div>
-              </>
-            ) : (
-              /* Input Total Bagi Rata */
-              <div className="flex flex-col gap-[10px]">
-                <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
-                  Total Tagihan Bersama (Rp)
+              </div>
+
+              {/* Siapa Aja yang Ikut Patungan Disini */}
+              <div className="flex w-full flex-col gap-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className={labelTextClass}>Teman Patungan ({selectedFriends.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFriends([...availableFriends])}
+                    className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] hover:underline"
+                  >
+                    Pilih Semua
+                  </button>
+                </div>
+                <div
+                  onScroll={onFriendChipScroll}
+                  className={`flex flex-wrap gap-[8px] ${friendChipScrollClass}`}
+                >
+                  {availableFriends.map((friend) => {
+                    const active = selectedFriends.includes(friend)
+                    return (
+                      <button
+                        key={friend}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => toggleFriendInBill(friend)}
+                        className={`flex max-w-[132px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[6px] transition duration-200 active:scale-95 ${
+                          active
+                            ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
+                            : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
+                        <span className="truncate font-['Outfit:Regular'] text-[14px]">{friend}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* PAGES 1..N: 1 Menu = 1 Full Page View */}
+          {splitMethod === 'per_item' &&
+            items.map((item, idx) => {
+              const pageIndex = idx + 1
+              return (
+                <section
+                  key={item.id}
+                  ref={(el) => {
+                    pageRefs.current[pageIndex] = el as HTMLDivElement | null
+                  }}
+                  className="flex h-full min-h-full w-full snap-center items-center justify-center px-[16px] pr-[28px] py-[16px]"
+                >
+                  <div className="flex w-full max-w-[480px] flex-col gap-[18px] rounded-[20px] border border-[#ececec] bg-white/92 p-[20px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+                    <div className="flex items-center justify-between gap-[8px]">
+                      <span className="rounded-[8px] bg-[#f2f3e6] px-[10px] py-[4px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18]">
+                        Menu {idx + 1} / {items.length}
+                      </span>
+                      {items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => requestRemoveItem(item)}
+                          className="rounded-[8px] px-[8px] py-[4px] font-['Outfit:Regular'] text-[14px] text-[#e5484d] transition hover:bg-[#fdf1f1]"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-[16px]">
+                      <label className="flex w-full flex-col gap-[10px]">
+                        <span className={labelTextClass}>Nama Menu</span>
+                        <input
+                          value={item.name}
+                          onChange={(e) => updateItemName(item.id, e.target.value)}
+                          placeholder="Masukkan nama menu"
+                          className={inputBoxClass}
+                        />
+                      </label>
+
+                      <div className="grid grid-cols-12 gap-[12px]">
+                        <div className="col-span-5 flex flex-col gap-[10px]">
+                          <span className={labelTextClass}>Jumlah</span>
+                          <div className="flex h-[48px] items-center justify-between rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[10px]">
+                            <button
+                              type="button"
+                              aria-label={`Kurangi jumlah ${item.name}`}
+                              onClick={() => updateItemQty(item.id, -1)}
+                              className="px-[6px] font-['Outfit:SemiBold'] text-[18px] text-[#054131] hover:text-[#a6bb18]"
+                            >
+                              −
+                            </button>
+                            <span className="font-['Outfit:Medium'] text-[14px] font-medium tabular-nums text-[#054131]">
+                              {item.qty}x
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Tambah jumlah ${item.name}`}
+                              onClick={() => updateItemQty(item.id, 1)}
+                              className="px-[6px] font-['Outfit:SemiBold'] text-[18px] text-[#054131] hover:text-[#a6bb18]"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <label className="col-span-7 flex flex-col gap-[10px]">
+                          <span className={labelTextClass}>Harga (Rp)</span>
+                          <input
+                            inputMode="numeric"
+                            value={item.price || ''}
+                            onChange={(e) => updateItemPrice(item.id, e.target.value)}
+                            placeholder="0"
+                            className={`${inputBoxClass} text-right font-['Outfit:Medium'] tabular-nums`}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="relative h-0 w-full">
+                      <div className="absolute inset-[-1px_0_0_0]">
+                        <img alt="" className="block size-full max-w-none" src={HOME_IMAGES.dashedLine} />
+                      </div>
+                    </div>
+
+                    {/* Pilih Avatar Teman untuk Menu Ini */}
+                    <div className="flex flex-col gap-[10px]">
+                      <div className="flex items-center justify-between">
+                        <span className={labelTextClass}>
+                          Dibagi ke ({item.assignedParticipantIds.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => assignAllToItem(item.id)}
+                          className="font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] hover:underline"
+                        >
+                          Pilih Semua
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-[8px]">
+                        {selectedFriends.map((friend) => {
+                          const assigned = item.assignedParticipantIds.includes(friend)
+                          return (
+                            <button
+                              key={friend}
+                              type="button"
+                              aria-pressed={assigned}
+                              onClick={() => toggleFriendOnItem(item.id, friend)}
+                              className={`flex max-w-[132px] items-center gap-[6px] rounded-[999px] border px-[10px] py-[6px] transition duration-150 active:scale-95 ${
+                                assigned
+                                  ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
+                                  : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-65 hover:opacity-100'
+                              }`}
+                            >
+                              <Icon src={CIRCLE_AVATARS[friend]} size={20} round />
+                              <span className="truncate font-['Outfit:Regular'] text-[14px]">{friend}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )
+            })}
+
+          {/* FINAL PAGE: Pajak, Tambah Menu Baru & Ringkasan Pembagian */}
+          <section
+            ref={(el) => {
+              pageRefs.current[totalPages - 1] = el as HTMLDivElement | null
+            }}
+            className="flex h-full min-h-full w-full snap-center items-center justify-center px-[16px] pr-[28px] py-[16px]"
+          >
+            <div className="flex w-full max-w-[480px] flex-col gap-[16px] rounded-[20px] border border-[#ececec] bg-white/92 p-[20px] shadow-[0_12px_36px_rgba(5,65,49,0.06)] backdrop-blur-[3px]">
+              {splitMethod === 'per_item' ? (
+                <>
+                  {/* Form Tambah Menu Baru */}
+                  <form
+                    onSubmit={handleAddItem}
+                    className="flex flex-col gap-[10px] rounded-[12px] border border-dashed border-[#dedede] bg-[#fefef8] p-[12px]"
+                  >
+                    <span className={labelTextClass}>Tambah Menu Lainnya</span>
+                    <div className="grid grid-cols-12 gap-[8px]">
+                      <input
+                        value={newItemName}
+                        onChange={(e) => setNewItemName(e.target.value)}
+                        placeholder="Nama menu"
+                        className="col-span-6 rounded-[12px] border border-[#ececec] bg-white px-[10px] py-[12px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                      />
+                      <input
+                        value={newItemQty}
+                        onChange={(e) => setNewItemQty(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="Qty"
+                        className="col-span-2 rounded-[12px] border border-[#ececec] bg-white px-[8px] py-[12px] text-center font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                      />
+                      <input
+                        value={newItemPrice}
+                        onChange={(e) => setNewItemPrice(e.target.value)}
+                        inputMode="numeric"
+                        placeholder="Harga"
+                        className="col-span-4 rounded-[12px] border border-[#ececec] bg-white px-[10px] py-[12px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none focus:border-[#a6bb18]"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="self-end rounded-[10px] bg-[#f2f3e6] px-[14px] py-[8px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
+                    >
+                      + Tambah Menu
+                    </button>
+                  </form>
+
+                  {/* Pajak & Service */}
+                  <div className="grid grid-cols-2 gap-[12px]">
+                    <label className="flex flex-col gap-[8px]">
+                      <span className={labelTextClass}>Pajak / PPN</span>
+                      <input
+                        inputMode="numeric"
+                        value={taxAmount || ''}
+                        placeholder="0"
+                        onChange={(e) => setTaxAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
+                        className={inputBoxClass}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-[8px]">
+                      <span className={labelTextClass}>Service Charge</span>
+                      <input
+                        inputMode="numeric"
+                        value={serviceAmount || ''}
+                        placeholder="0"
+                        onChange={(e) => setServiceAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
+                        className={inputBoxClass}
+                      />
+                    </label>
+                  </div>
+                </>
+              ) : (
+                <label className="flex flex-col gap-[10px]">
+                  <span className={labelTextClass}>Total Tagihan Bersama (Rp)</span>
                   <input
                     inputMode="numeric"
                     value={equalTotalInput}
                     onChange={(e) => setEqualTotalInput(e.target.value.replace(/\D/g, ''))}
                     placeholder="185000"
-                    className="rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] font-['Outfit:SemiBold'] text-[20px] font-semibold text-[#054131] outline-none focus:border-[#a6bb18]"
+                    className={inputBoxClass}
                   />
                 </label>
-              </div>
-            )}
+              )}
 
-            {/* Ringkasan per Teman */}
-            <div className="flex flex-col gap-[8px] border-t border-[#ececec] pt-[10px]">
-              <div className="flex items-center justify-between">
-                <p className="font-['Outfit:Medium'] text-[13px] font-medium text-[#054131]">
-                  Ringkasan per Teman ({selectedFriends.length} orang)
-                </p>
-                <p className="font-['Outfit:SemiBold'] text-[16px] font-semibold tabular-nums text-[#054131]">
-                  {formatRupiah(grandTotal)}
-                </p>
-              </div>
-              <div className="grid max-h-[126px] grid-cols-2 gap-[8px] overflow-y-auto pr-[2px]">
-                {participantShares.map((p) => (
-                  <div
-                    key={p.name}
-                    className="flex items-center justify-between gap-[6px] rounded-[8px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[6px]"
-                  >
-                    <div className="flex min-w-0 items-center gap-[6px]">
-                      <span className="relative block size-[20px] shrink-0">
-                        <Img src={p.avatarUrl} skeleton="rounded-full" />
+              {/* Ringkasan per Teman */}
+              <div className="flex flex-col gap-[10px] border-t border-[#ececec] pt-[12px]">
+                <div className="flex items-center justify-between">
+                  <span className={labelTextClass}>Total Tagihan</span>
+                  <span className="font-['Outfit:SemiBold'] text-[18px] font-semibold tabular-nums text-[#054131]">
+                    {formatRupiah(grandTotal)}
+                  </span>
+                </div>
+                <div className="grid max-h-[116px] grid-cols-2 gap-[8px] overflow-y-auto pr-[2px]">
+                  {participantShares.map((p) => (
+                    <div
+                      key={p.name}
+                      className="flex items-center justify-between gap-[6px] rounded-[10px] border border-[#ececec] bg-[#fefef8] px-[10px] py-[8px]"
+                    >
+                      <div className="flex min-w-0 items-center gap-[6px]">
+                        <span className="relative block size-[20px] shrink-0">
+                          <Img src={p.avatarUrl} skeleton="rounded-full" />
+                        </span>
+                        <span className="truncate font-['Outfit:Regular'] text-[14px] text-[#054131]">{p.name}</span>
+                      </div>
+                      <span className="shrink-0 font-['Outfit:Medium'] text-[14px] font-medium tabular-nums text-[#a6bb18]">
+                        {formatRupiah(p.totalOwed)}
                       </span>
-                      <span className="truncate font-['Outfit:Regular'] text-[12px] text-[#054131]">{p.name}</span>
                     </div>
-                    <span className="shrink-0 font-['Outfit:Medium'] text-[12px] font-medium tabular-nums text-[#a6bb18]">
-                      {formatRupiah(p.totalOwed)}
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div className="flex gap-[10px] pt-[2px]">
-              <button
-                type="button"
-                onClick={requestCancelBack}
-                className="flex-1 rounded-[10px] bg-[#f2f3e6] py-[11px] font-['Outfit:Medium'] text-[14px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="flex-[2] rounded-[10px] bg-[#a6bb18] py-[11px] font-['Outfit:Medium'] text-[14px] font-medium text-white transition hover:bg-[#97ab12] active:scale-[0.98]"
-              >
+              <PrimaryButton type="button" onClick={handleFinish}>
                 Simpan & Lihat Rincian
-              </button>
+              </PrimaryButton>
             </div>
-          </div>
-        </section>
-      </div>
-
-      {/* Bottom White Blur Layer + Floating Page Dots & Quick Summary Pill */}
-      <div className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-white via-white/92 to-transparent pt-[18px] pb-[16px] backdrop-blur-[2px]">
-        <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[12px] px-[16px]">
-          {/* Page Dots */}
-          <div className="flex items-center gap-[6px]">
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`Lompat ke halaman ${i + 1}`}
-                onClick={() => scrollToPage(i)}
-                className={`h-[6px] rounded-full transition-all duration-300 ${
-                  activePageIdx === i ? 'w-[20px] bg-[#a6bb18]' : 'w-[6px] bg-[#dedede]'
-                }`}
-              />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-[10px]">
-            <span className="font-['Outfit:SemiBold'] text-[14px] font-semibold tabular-nums text-[#054131]">
-              {formatRupiah(grandTotal)}
-            </span>
-            {activePageIdx < totalPages - 1 ? (
-              <button
-                type="button"
-                onClick={() => scrollToPage(activePageIdx + 1)}
-                className="rounded-full bg-[#f2f3e6] px-[12px] py-[6px] font-['Outfit:Medium'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
-              >
-                Lanjut ↓
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="rounded-full bg-[#a6bb18] px-[14px] py-[6px] font-['Outfit:Medium'] text-[12px] font-medium text-white transition hover:bg-[#97ab12]"
-              >
-                Simpan ✓
-              </button>
-            )}
-          </div>
+          </section>
         </div>
       </div>
 
