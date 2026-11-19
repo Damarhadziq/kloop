@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HomeDashboardSkeleton } from '@/components/skeletons'
-import { ConfirmModal, Icon, preloadImages, screenClass, useSwitch } from '@/components/ui'
+import { ConfirmModal, Icon, PullToRefresh, preloadImages, screenClass, useSwitch } from '@/components/ui'
 import { BillSummaryScreen } from '@/features/bill-summary'
 import {
   JenisSheet,
@@ -260,6 +260,14 @@ export function HomeDashboard({
     setToast('Tagihan berhasil dibuat')
   }
 
+  const handleRefreshDashboard = useCallback(async () => {
+    setIsLoadingDashboard(true)
+    const [data] = await Promise.all([getActiveBills(550), preloadImages([...HOME_ASSETS, ...SCAN_ASSETS])])
+    setBills((curr) => (curr.length > data.length ? curr : data))
+    setIsLoadingDashboard(false)
+    setToast('Data berhasil diperbarui')
+  }, [setToast])
+
   let screenContent
   if (shownScreen === 'all-bills') {
     screenContent = (
@@ -348,10 +356,14 @@ export function HomeDashboard({
   return (
     <>
       {screenContent ?? (
-        <div key="home" className={`min-h-dvh w-full bg-white text-[#054131] ${screenClass(leaving)}`}>
-          <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-[24px] pb-[48px]">
+        <PullToRefresh
+          onRefresh={handleRefreshDashboard}
+          disabled={sheetOpen || jenisOpen || installOpen || profileOpen || confirmState.open}
+        >
+          <div key="home" className={`min-h-dvh w-full bg-white text-[#054131] ${screenClass(leaving)}`}>
+          <div className="mx-auto flex w-full max-w-[430px] flex-col gap-[24px] pb-[48px]">
             {/* Header */}
-            <header className="relative z-30 flex items-center justify-between px-[16px] pt-[24px] pb-[14px] md:pt-[32px] [animation:fade-down_420ms_cubic-bezier(0.2,0.8,0.2,1)_both]">
+            <header className="relative z-30 flex items-center justify-between px-[16px] pt-[24px] pb-[14px] [animation:fade-down_420ms_cubic-bezier(0.2,0.8,0.2,1)_both]">
               <ProfileMenu
                 open={profileOpen}
                 onToggle={() => setProfileOpen((o) => !o)}
@@ -375,7 +387,7 @@ export function HomeDashboard({
             {isLoadingDashboard ? (
               <HomeDashboardSkeleton />
             ) : (
-              <main className="grid grid-cols-1 gap-[40px] md:grid-cols-2 md:gap-x-[32px] md:px-[16px]">
+              <main className="flex flex-col gap-[40px]">
                 <div className="stagger flex flex-col gap-[40px]">
                   {/* Status Talangan */}
                   <StatusTalanganCard
@@ -399,7 +411,7 @@ export function HomeDashboard({
 
                 <div className="stagger flex flex-col gap-[40px]">
                   {/* Tagihan Berjalan */}
-                  <section ref={billsRef} className="flex scroll-mt-4 flex-col gap-[14px] px-[16px] md:px-0">
+                  <section ref={billsRef} className="flex scroll-mt-4 flex-col gap-[14px] px-[16px]">
                     <div className="flex items-center justify-between font-['Outfit:Medium'] leading-[normal] font-medium tracking-[-0.2px] whitespace-nowrap">
                       <h2 className="text-[18px]">Tagihan Berjalan</h2>
                       <button
@@ -450,6 +462,7 @@ export function HomeDashboard({
 
           <InstallAppSheet open={installOpen} onClose={() => setInstallOpen(false)} notify={setToast} />
         </div>
+        </PullToRefresh>
       )}
 
       <ConfirmModal

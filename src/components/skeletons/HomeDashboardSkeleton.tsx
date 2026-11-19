@@ -5,11 +5,11 @@ export function HomeDashboardSkeleton() {
     <main
       role="status"
       aria-label="Memuat beranda"
-      className="grid grid-cols-1 gap-[40px] md:grid-cols-2 md:gap-x-[32px] md:px-[16px]"
+      className="flex flex-col gap-[40px]"
     >
       <div className="flex flex-col gap-[40px]">
         {/* Status Talangan Skeleton */}
-        <section className="flex flex-col gap-[12px] px-[16px] md:px-0">
+        <section className="flex flex-col gap-[12px] px-[16px]">
           <Skeleton className="h-[22px] w-[132px] rounded-[6px]" tone="muted" />
           <div className="flex w-full flex-col gap-[14px] rounded-[12px] border border-[#ECECEC] bg-white p-[12px]">
             <div className="flex w-full items-center justify-between gap-2">
@@ -43,7 +43,7 @@ export function HomeDashboardSkeleton() {
         </section>
 
         {/* Hero Action CTA Skeleton */}
-        <section className="flex items-center gap-[24px] px-[16px] md:px-0">
+        <section className="flex items-center gap-[24px] px-[16px]">
           <Skeleton className="h-[110px] w-[96px] shrink-0 rounded-[14px]" />
           <div className="flex min-w-px flex-1 flex-col gap-[18px]">
             <div className="flex flex-col gap-[8px]">
@@ -61,7 +61,7 @@ export function HomeDashboardSkeleton() {
 
       <div className="flex flex-col gap-[40px]">
         {/* Tagihan Berjalan Skeleton */}
-        <section className="flex flex-col gap-[14px] px-[16px] md:px-0">
+        <section className="flex flex-col gap-[14px] px-[16px]">
           <div className="flex items-center justify-between">
             <Skeleton className="h-[22px] w-[142px] rounded-[6px]" tone="muted" />
             <Skeleton className="h-[18px] w-[102px] rounded-[6px]" />
@@ -91,7 +91,7 @@ export function HomeDashboardSkeleton() {
         </section>
 
         {/* Circle Kamu Skeleton */}
-        <section className="flex flex-col gap-[16px] px-[16px] md:px-0">
+        <section className="flex flex-col gap-[16px] px-[16px]">
           <div className="flex items-center justify-between">
             <Skeleton className="h-[22px] w-[110px] rounded-[6px]" tone="muted" />
             <Skeleton className="h-[20px] w-[78px] rounded-[6px]" />

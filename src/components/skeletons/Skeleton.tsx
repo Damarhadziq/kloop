@@ -111,7 +111,7 @@ export function ScanScreenSkeleton() {
     <div
       role="status"
       aria-label="Menyiapkan kamera"
-      className="mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[16px] pt-[24px] pb-[24px] md:pt-[32px]"
+      className="mx-auto flex w-full max-w-[430px] flex-1 flex-col px-[16px] pt-[24px] pb-[24px]"
     >
       <div className="flex w-full items-center justify-between">
         <Skeleton className="size-[40px] rounded-full" />
@@ -124,7 +124,7 @@ export function ScanScreenSkeleton() {
         <Skeleton className="h-[22px] w-[260px] max-w-full rounded-[6px]" tone="muted" />
         <Skeleton className="h-[16px] w-[290px] max-w-full rounded-[6px]" />
       </div>
-      <Skeleton className="mt-[24px] min-h-[360px] w-full flex-1 rounded-[24px] md:max-h-[620px]" tone="muted" />
+      <Skeleton className="mt-[24px] min-h-[360px] w-full flex-1 rounded-[24px]" tone="muted" />
       <div className="mt-[24px] flex items-center justify-center gap-[6px]">
         <Skeleton className="h-[18px] w-[190px] rounded-[6px]" />
       </div>

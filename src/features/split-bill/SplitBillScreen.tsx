@@ -492,7 +492,7 @@ export function SplitBillScreen({
   if (isLoading) {
     return (
       <div className="min-h-dvh w-full bg-white text-[#054131]">
-        <div className="mx-auto flex w-full max-w-[560px] flex-col gap-[20px] px-[16px] pt-[24px] pb-[40px] md:pt-[32px]">
+        <div className="mx-auto flex w-full max-w-[430px] flex-col gap-[20px] px-[16px] pt-[24px] pb-[40px]">
           <ScanResultSkeleton />
         </div>
       </div>
@@ -504,14 +504,14 @@ export function SplitBillScreen({
       {/* Faded Kloop Logo Watermark in Center Background */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center select-none"
+        className="pointer-events-none fixed inset-y-0 left-1/2 z-0 flex w-full max-w-[430px] -translate-x-1/2 items-center justify-center select-none"
       >
-        <img src={KLOOP_LOGO} alt="" className="w-[230px] max-w-[58vw] opacity-[0.06] md:w-[280px]" />
+        <img src={KLOOP_LOGO} alt="" className="w-[230px] max-w-[58%] opacity-[0.06]" />
       </div>
 
-      {/* Fixed Header */}
-      <header className="fixed inset-x-0 top-0 z-40 bg-white px-[16px] pt-[20px] pb-[12px] md:pt-[28px]">
-        <div className="mx-auto flex w-full max-w-[520px] items-center justify-between gap-[10px]">
+      {/* Fixed Header constrained to 430px mobile shell */}
+      <header className="fixed top-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 bg-white px-[16px] pt-[20px] pb-[12px]">
+        <div className="flex w-full items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
 
           <h1 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
@@ -615,16 +615,17 @@ export function SplitBillScreen({
         </div>
       </header>
 
-      {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail (Wider gap, hold-only, no tap switch) */}
-      <div
-        ref={railRef}
-        onPointerDown={handleRailPointerDown}
-        onPointerMove={handleRailPointerMove}
-        onPointerUp={handleRailPointerEnd}
-        onPointerCancel={handleRailPointerEnd}
-        onLostPointerCapture={() => setIsHoldingRail(false)}
-        className="fixed top-1/2 right-[8px] z-40 flex -translate-y-1/2 touch-none select-none flex-col items-end gap-[14px] py-[22px] pl-[20px] pr-[6px] md:right-[20px]"
-      >
+      {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail anchored inside 430px mobile shell */}
+      <div className="pointer-events-none fixed inset-y-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2">
+        <div
+          ref={railRef}
+          onPointerDown={handleRailPointerDown}
+          onPointerMove={handleRailPointerMove}
+          onPointerUp={handleRailPointerEnd}
+          onPointerCancel={handleRailPointerEnd}
+          onLostPointerCapture={() => setIsHoldingRail(false)}
+          className="pointer-events-auto absolute top-1/2 right-[8px] flex -translate-y-1/2 touch-none select-none flex-col items-end gap-[14px] py-[22px] pl-[20px] pr-[6px]"
+        >
         {pageMetaList.map((meta) => {
           const isActive = activePageIdx === meta.index
           const distance = Math.abs(activePageIdx - meta.index)
@@ -664,6 +665,7 @@ export function SplitBillScreen({
             </div>
           )
         })}
+        </div>
       </div>
 
       {/* Main Stacked Carousel Viewport */}

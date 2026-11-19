@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Skeleton, useSimulatedLoading } from '@/components/skeletons'
-import { Badge, RoundIconButton, useScrollBarOnScroll } from '@/components/ui'
+import { Badge, PullToRefresh, RoundIconButton, useScrollBarOnScroll } from '@/components/ui'
 import { HOME_IMAGES, SCAN_ICONS, formatRupiah } from '@/services/bill.service'
 import type { Bill } from '@/types'
 import { ActiveBillCard } from './ActiveBillCard'
@@ -210,7 +210,7 @@ export function AllBillsScreen({
     ],
     [bills],
   )
-  const { isLoading } = useSimulatedLoading(true, 550, requiredAssets)
+  const { isLoading, triggerLoading } = useSimulatedLoading(true, 550, requiredAssets)
 
   const [query, setQuery] = useState('')
   const [activeFilter, setActiveFilter] = useState<BillFilterKey>('all')
@@ -251,8 +251,9 @@ export function AllBillsScreen({
   )
 
   return (
-    <div className="min-h-dvh w-full bg-white text-[#054131]">
-      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-[18px] px-[16px] pt-[24px] pb-[48px] md:pt-[32px]">
+    <PullToRefresh onRefresh={() => void triggerLoading(550)}>
+      <div className="min-h-dvh w-full bg-white text-[#054131]">
+      <div className="mx-auto flex w-full max-w-[430px] flex-col gap-[18px] px-[16px] pt-[24px] pb-[48px]">
         {/* Header */}
         <header className="flex items-center justify-between gap-[10px]">
           <RoundIconButton label="Kembali ke beranda" src={SCAN_ICONS.back} onClick={onBack} skeleton="rounded-[5px]" />
@@ -385,5 +386,6 @@ export function AllBillsScreen({
         )}
       </div>
     </div>
+    </PullToRefresh>
   )
 }

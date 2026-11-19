@@ -33,7 +33,7 @@ export function LoadingScreen({
 
   return (
     <div className="flex min-h-dvh w-full flex-col bg-white" aria-busy={!ready}>
-      <div className="mx-auto w-full max-w-[560px] px-[16px] pt-[24px] md:pt-[32px]">
+      <div className="mx-auto w-full max-w-[430px] px-[16px] pt-[24px]">
         <ScanRoundButton label="Batalkan" icon={SCAN_ICONS.back} onClick={onBack} />
       </div>
       <div className="flex flex-1 items-center justify-center pb-[64px]">

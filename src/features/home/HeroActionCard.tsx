@@ -4,7 +4,7 @@ import type { InputMode } from '@/types'
 
 export function HeroActionCard({ onOpenJenis }: { onOpenJenis: (mode: InputMode) => void }) {
   return (
-    <section className="flex items-center gap-[20px] px-[16px] md:px-0">
+    <section className="flex items-center gap-[20px] px-[16px]">
       <div className="relative h-[110px] w-[96px] shrink-0">
         <Img src={HOME_IMAGES.illustration} skeleton="rounded-[14px]" />
       </div>

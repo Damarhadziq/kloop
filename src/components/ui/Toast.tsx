@@ -13,7 +13,7 @@ export function Toast({ message }: { message: string | null }) {
   return createPortal(
     <div
       role="status"
-      className={`fixed bottom-[24px] left-1/2 z-50 max-w-[calc(100vw-32px)] rounded-[10px] bg-[#054131] px-[16px] py-[10px] text-center font-['Outfit:Regular'] text-[14px] text-white shadow-lg ${
+      className={`fixed bottom-[24px] left-1/2 z-50 max-w-[min(398px,calc(100vw-32px))] rounded-[10px] bg-[#054131] px-[16px] py-[10px] text-center font-['Outfit:Regular'] text-[14px] text-white shadow-lg ${
         closing ? '[animation:toast-out_200ms_ease-in_forwards]' : '[animation:toast-in_260ms_cubic-bezier(0.2,0.8,0.2,1)]'
       }`}
       style={{ transform: 'translateX(-50%)' }}

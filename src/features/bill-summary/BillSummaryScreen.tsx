@@ -48,7 +48,7 @@ export function BillSummaryScreen({
 
   return (
     <div className="min-h-dvh w-full bg-white text-[#054131]">
-      <div className="mx-auto flex w-full max-w-[560px] flex-col gap-[20px] px-[16px] pt-[24px] pb-[48px] md:pt-[32px]">
+      <div className="mx-auto flex w-full max-w-[430px] flex-col gap-[20px] px-[16px] pt-[24px] pb-[48px]">
         {/* Header */}
         <header className="flex items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali ke beranda" icon={SCAN_ICONS.back} onClick={onBack} />

@@ -13,7 +13,7 @@ export function CircleSection({
   onRemoveFriend: (name: CircleName) => void
 }) {
   return (
-    <section className="flex flex-col gap-[16px] px-[16px] md:px-0">
+    <section className="flex flex-col gap-[16px] px-[16px]">
       <div className="flex items-center justify-between">
         <h2 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px]">
           Circle Kamu

@@ -61,7 +61,7 @@ export function AuthHeader({ onBack, onSupport }: { onBack?: () => void; onSuppo
 export function AuthShell({ header, footer, children }: { header: ReactNode; footer?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex min-h-dvh w-full flex-col bg-white text-[#054131]">
-      <div className="mx-auto flex w-full max-w-[480px] flex-1 flex-col px-[16px] pt-[24px] pb-[28px] md:pt-[40px]">
+      <div className="mx-auto flex w-full max-w-[430px] flex-1 flex-col px-[16px] pt-[24px] pb-[28px]">
         {header}
         <div className="mt-[32px] flex flex-col">{children}</div>
         {footer && <div className="mt-auto pt-[40px] [animation:fade-in_500ms_ease-out_400ms_both]">{footer}</div>}

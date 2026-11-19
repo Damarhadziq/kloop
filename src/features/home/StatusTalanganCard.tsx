@@ -25,7 +25,7 @@ export function StatusTalanganCard({
   const counts = { masuk: talangan.masuk.count, tagihan: talangan.tagihan.count }
 
   return (
-    <section className="flex flex-col gap-[12px] px-[16px] md:px-0">
+    <section className="flex flex-col gap-[12px] px-[16px]">
       <h2 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px]">
         Status Talangan
       </h2>

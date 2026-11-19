@@ -351,7 +351,7 @@ export function ScanScreen({
 
       {/* Keep <video> always mounted so Android camera hardware & torch initialize reliably */}
       <div
-        className={`mx-auto flex w-full max-w-[560px] flex-1 flex-col px-[16px] pt-[24px] pb-[24px] md:pt-[32px] ${
+        className={`mx-auto flex w-full max-w-[430px] flex-1 flex-col px-[16px] pt-[24px] pb-[24px] ${
           isPreparing ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
       >
@@ -399,7 +399,7 @@ export function ScanScreen({
 
         <div
           ref={viewfinderRef}
-          className="relative mt-[24px] min-h-[360px] w-full flex-1 overflow-clip rounded-[24px] bg-[#d9d9d9] md:max-h-[620px]"
+          className="relative mt-[24px] min-h-[360px] w-full flex-1 overflow-clip rounded-[24px] bg-[#d9d9d9]"
         >
           <video
             ref={videoRef}

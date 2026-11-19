@@ -42,7 +42,7 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={labelledBy}
         onClick={(e) => e.stopPropagation()}
-        className={`max-h-[calc(100dvh-24px)] w-full max-w-[560px] touch-pan-y overflow-y-auto overscroll-contain rounded-t-[24px] bg-white ${className} ${
+        className={`max-h-[calc(100dvh-24px)] w-full max-w-[430px] touch-pan-y overflow-y-auto overscroll-contain rounded-t-[24px] bg-white ${className} ${
           closing
             ? '[animation:sheet-down_260ms_cubic-bezier(0.4,0,1,1)_forwards]'
             : '[animation:sheet-up_360ms_cubic-bezier(0.2,0.8,0.2,1)]'
