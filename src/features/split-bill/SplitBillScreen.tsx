@@ -97,6 +97,7 @@ export function SplitBillScreen({
   const menuPopoverRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLElement | null)[]>([])
+  const wheelLockRef = useRef(0)
   const { onScroll: onFriendChipScroll, scrollClassName: friendChipScrollClass } = useScrollBarOnScroll()
 
   // Confirmation modal state for destructive actions
@@ -490,14 +491,14 @@ export function SplitBillScreen({
   }
 
   const labelTextClass =
-    "font-['Outfit:Regular'] text-[15px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]"
+    "font-['Outfit'] text-[15px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]"
   const inputBoxClass =
-    "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[12px] font-['Outfit:Regular'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+    "w-full rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] font-['Outfit'] text-[14px] leading-[normal] tracking-[-0.2px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 placeholder:text-[#8e8e8e] focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
 
   // Inactive cards are purely display-only (disabled, non-clickable, scaled down slightly)
   const getCardStackClass = (cardIdx: number) => {
     const isActive = activePageIdx === cardIdx
-    return `relative w-full max-w-[366px] rounded-[20px] border bg-white p-[16px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+    return `relative w-full max-w-[366px] rounded-[20px] border bg-white p-[18px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
       isActive
         ? 'z-20 scale-100 opacity-100 border-[#ececec] shadow-[0_14px_34px_rgba(5,65,49,0.08)]'
         : 'z-0 pointer-events-none select-none scale-[0.91] opacity-55 border-[#ececec]/80 shadow-none'
@@ -659,11 +660,11 @@ export function SplitBillScreen({
                   style={{ animationDelay: `${meta.index * 20}ms` }}
                   className={`pointer-events-none mr-[14px] flex max-w-[184px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-150 ease-out [animation:float-pill-in_180ms_cubic-bezier(0.34,1.56,0.64,1)_both] ${waveTransform} ${
                     isActive
-                      ? 'border-[#a6bb18] bg-[#054131] text-white'
+                      ? 'border-[#a6bb18] bg-[#a6bb18] text-white'
                       : 'border-[#ececec] bg-white/95 text-[#054131]'
                   }`}
                 >
-                  <span className="truncate font-['Outfit:Medium'] text-[12px] font-medium">
+                  <span className="truncate font-['Outfit'] text-[12px] font-medium">
                     {meta.shortTitle}
                   </span>
                 </div>
@@ -697,10 +698,19 @@ export function SplitBillScreen({
           className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[118px] bg-gradient-to-t from-white from-30% via-white/90 via-65% to-transparent"
         />
 
-        {/* Stacked Vertical Scroll Container (Generous gap-[38px] between cards + wider right padding pr-[38px] for rail gap) */}
+        {/* Stacked Vertical Scroll Container (1 scroll = 1 card via snap-always & wheel step) */}
         <div
           ref={pageScrollRef}
           onScroll={handleViewportScroll}
+          onWheel={(e) => {
+            if (Math.abs(e.deltaY) < 12) return
+            e.preventDefault()
+            const now = Date.now()
+            if (now - wheelLockRef.current < 380) return
+            wheelLockRef.current = now
+            const dir = e.deltaY > 0 ? 1 : -1
+            scrollToPage(activePageIdx + dir, 'smooth')
+          }}
           className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[38px] overflow-y-auto pl-[16px] pr-[38px] py-[16vh] scroll-smooth"
         >
           {/* CARD 0: Nama Tempat, Metode Pembagian, & Teman Patungan */}
@@ -709,9 +719,12 @@ export function SplitBillScreen({
               pageRefs.current[0] = el
             }}
             aria-disabled={activePageIdx !== 0}
-            className="flex w-full shrink-0 snap-center justify-center"
+            className="flex w-full shrink-0 snap-center snap-always justify-center"
           >
-            <div inert={activePageIdx !== 0 ? true : undefined} className={`flex flex-col gap-[15px] ${getCardStackClass(0)}`}>
+            <div
+              inert={activePageIdx !== 0 ? true : undefined}
+              className={`flex flex-col gap-[20px] [animation:split-card-in_520ms_cubic-bezier(0.22,1,0.36,1)_both] ${getCardStackClass(0)}`}
+            >
               <label className="flex w-full flex-col gap-[8px]">
                 <span className={labelTextClass}>Nama Tempat / Tagihan</span>
                 <input
@@ -805,20 +818,25 @@ export function SplitBillScreen({
               </div>
 
               {/* Teman Patungan */}
-              <div className="flex w-full flex-col gap-[8px]">
+              <div className="flex w-full flex-col gap-[10px]">
                 <div className="flex items-center justify-between">
-                  <span className={labelTextClass}>Teman Patungan ({selectedFriends.length})</span>
+                  <div className="flex items-center gap-[6px]">
+                    <span className={labelTextClass}>Teman Patungan</span>
+                    <span className="flex size-[18px] items-center justify-center rounded-[4px] bg-[#f2f3e6] text-center font-['Outfit'] text-[12px] font-medium tabular-nums text-[#a6bb18]">
+                      {selectedFriends.length}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setSelectedFriends([...availableFriends])}
-                    className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] hover:underline"
+                    className="font-['Outfit'] text-[13px] font-medium text-[#a6bb18] hover:underline"
                   >
                     Pilih Semua
                   </button>
                 </div>
                 <div
                   onScroll={onFriendChipScroll}
-                  className={`flex flex-wrap gap-[7px] ${friendChipScrollClass}`}
+                  className={`flex flex-wrap gap-[8px] ${friendChipScrollClass}`}
                 >
                   {availableFriends.map((friend) => {
                     const active = selectedFriends.includes(friend)
@@ -828,14 +846,20 @@ export function SplitBillScreen({
                         type="button"
                         aria-pressed={active}
                         onClick={() => toggleFriendInBill(friend)}
-                        className={`flex max-w-[120px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-200 active:scale-95 ${
+                        className={`flex max-w-[124px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-200 active:scale-95 ${
                           active
-                            ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
-                            : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-70 hover:opacity-100'
+                            ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#a6bb18] ring-1 ring-[#a6bb18]'
+                            : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18]'
                         }`}
                       >
                         <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
-                        <span className="truncate font-['Outfit:Regular'] text-[13px]">{friend}</span>
+                        <span
+                          className={`truncate font-['Outfit'] text-[13px] ${
+                            active ? 'font-medium text-[#a6bb18]' : 'font-normal text-[#054131]'
+                          }`}
+                        >
+                          {friend}
+                        </span>
                       </button>
                     )
                   })}
@@ -856,9 +880,9 @@ export function SplitBillScreen({
                     pageRefs.current[pageIndex] = el
                   }}
                   aria-disabled={!isCardActive}
-                  className="flex w-full shrink-0 snap-center justify-center"
+                  className="flex w-full shrink-0 snap-center snap-always justify-center"
                 >
-                  <div inert={!isCardActive ? true : undefined} className={`flex flex-col gap-[14px] ${getCardStackClass(pageIndex)}`}>
+                  <div inert={!isCardActive ? true : undefined} className={`flex flex-col gap-[18px] ${getCardStackClass(pageIndex)}`}>
                     {/* Menu Index without background frame + Icon-only Delete button */}
                     <div className="flex items-center justify-between gap-[8px]">
                       <span className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18]">
@@ -895,7 +919,7 @@ export function SplitBillScreen({
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-[12px]">
+                    <div className="flex flex-col gap-[16px]">
                       <label className="flex w-full flex-col gap-[8px]">
                         <span className={labelTextClass}>Nama Menu</span>
                         <input
@@ -909,7 +933,7 @@ export function SplitBillScreen({
                       <div className="grid grid-cols-12 gap-[10px]">
                         <div className="col-span-5 flex flex-col gap-[8px]">
                           <span className={labelTextClass}>Jumlah</span>
-                          <div className="flex h-[44px] items-center justify-between rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[10px]">
+                          <div className="flex h-[40px] items-center justify-between rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[10px]">
                             <button
                               type="button"
                               aria-label={`Kurangi jumlah ${item.name}`}
@@ -952,20 +976,23 @@ export function SplitBillScreen({
                     </div>
 
                     {/* Pilih Avatar Teman untuk Menu Ini */}
-                    <div className="flex flex-col gap-[8px]">
+                    <div className="flex flex-col gap-[10px]">
                       <div className="flex items-center justify-between">
-                        <span className={labelTextClass}>
-                          Dibagi ke ({item.assignedParticipantIds.length})
-                        </span>
+                        <div className="flex items-center gap-[6px]">
+                          <span className={labelTextClass}>Dibagi ke</span>
+                          <span className="flex size-[18px] items-center justify-center rounded-[4px] bg-[#f2f3e6] text-center font-['Outfit'] text-[12px] font-medium tabular-nums text-[#a6bb18]">
+                            {item.assignedParticipantIds.length}
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => assignAllToItem(item.id)}
-                          className="font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] hover:underline"
+                          className="font-['Outfit'] text-[13px] font-medium text-[#a6bb18] hover:underline"
                         >
                           Pilih Semua
                         </button>
                       </div>
-                      <div className="flex flex-wrap items-center gap-[7px]">
+                      <div className="flex flex-wrap items-center gap-[8px]">
                         {selectedFriends.map((friend) => {
                           const assigned = item.assignedParticipantIds.includes(friend)
                           return (
@@ -974,14 +1001,20 @@ export function SplitBillScreen({
                               type="button"
                               aria-pressed={assigned}
                               onClick={() => toggleFriendOnItem(item.id, friend)}
-                              className={`flex max-w-[120px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-150 active:scale-95 ${
+                              className={`flex max-w-[124px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-150 active:scale-95 ${
                                 assigned
-                                  ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131] ring-1 ring-[#a6bb18]'
-                                  : 'border-[#ececec] bg-white text-[#8e8e8e] opacity-65 hover:opacity-100'
+                                  ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#a6bb18] ring-1 ring-[#a6bb18]'
+                                  : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18]'
                               }`}
                             >
                               <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
-                              <span className="truncate font-['Outfit:Regular'] text-[13px]">{friend}</span>
+                              <span
+                                className={`truncate font-['Outfit'] text-[13px] ${
+                                  assigned ? 'font-medium text-[#a6bb18]' : 'font-normal text-[#054131]'
+                                }`}
+                              >
+                                {friend}
+                              </span>
                             </button>
                           )
                         })}
@@ -998,9 +1031,9 @@ export function SplitBillScreen({
               pageRefs.current[totalPages - 1] = el
             }}
             aria-disabled={activePageIdx !== totalPages - 1}
-            className="flex w-full shrink-0 snap-center justify-center"
+            className="flex w-full shrink-0 snap-center snap-always justify-center"
           >
-            <div inert={activePageIdx !== totalPages - 1 ? true : undefined} className={`flex flex-col gap-[14px] ${getCardStackClass(totalPages - 1)}`}>
+            <div inert={activePageIdx !== totalPages - 1 ? true : undefined} className={`flex flex-col gap-[18px] ${getCardStackClass(totalPages - 1)}`}>
               {splitMethod === 'per_item' ? (
                 <>
                   {/* Form Tambah Menu Baru */}

@@ -295,6 +295,10 @@
   from { opacity: 1; transform: translateX(0) scale(1); }
   to { opacity: 0; transform: translateX(8px) scale(0.94); }
 }
+@keyframes split-card-in {
+  from { opacity: 0; transform: translateY(32px) scale(0.93); }
+  to { opacity: 1; transform: none; }
+}
 /* Kloop logo loader */
 @keyframes logo-intro {
   from { clip-path: inset(0 100% 0 0); opacity: 0.4; transform: translateY(6px); }
