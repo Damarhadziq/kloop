@@ -137,7 +137,7 @@ export function InstallAppSheet({
                 </span>
                 <span>
                   Ketuk ikon <strong>Share / Bagikan</strong> (kotak dengan panah ke atas{' '}
-                  <span className="inline-block rounded bg-[#ececec] px-[5px] py-[1px] font-mono text-[11px]">↑</span>)
+                  <span className="inline-block rounded bg-[#ececec] px-[5px] py-[1px] font-['Outfit:Medium'] text-[11px]">↑</span>)
                   di bagian bawah layar Safari.
                 </span>
               </li>

@@ -41,7 +41,7 @@ export function useSwitch<T>(value: T, exitMs = 220) {
     const t = setTimeout(() => {
       setShown(value)
       setLeaving(false)
-      window.scrollTo({ top: 0 })
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
     }, exitMs)
     return () => clearTimeout(t)
   }, [value, shown, exitMs])
@@ -66,28 +66,36 @@ export function useToast(duration = 2400) {
 }
 
 /**
- * Locks page scrolling while any overlay/bottom-sheet is mounted.
- * Uses fixed-body positioning with saved scrollY so mobile touch-scrolling
- * on the background page is completely prevented.
+ * Locks background page scrolling while any overlay/bottom-sheet/modal is mounted
+ * WITHOUT mutating `body.style.position = 'fixed'`, so `window.scrollY` never resets
+ * and closing a sheet/modal never causes a jump to the top.
  */
 let scrollLocks = 0
-let savedScrollY = 0
+
+function preventBackgroundTouchMove(e: TouchEvent) {
+  const target = e.target as HTMLElement | null
+  const dialog = target?.closest('[role="dialog"], [role="alertdialog"]') as HTMLElement | null
+  if (!dialog) {
+    if (e.cancelable) e.preventDefault()
+    return
+  }
+  // If the dialog content itself doesn't overflow vertically, prevent overscroll leak
+  if (dialog.scrollHeight <= dialog.clientHeight && e.cancelable) {
+    e.preventDefault()
+  }
+}
+
 export function useScrollLock(active: boolean) {
   useEffect(() => {
     if (!active) return
     const root = document.documentElement
     const body = document.body
     if (scrollLocks++ === 0) {
-      savedScrollY = window.scrollY
       root.style.overflow = 'hidden'
       root.style.overscrollBehavior = 'none'
       body.style.overflow = 'hidden'
       body.style.overscrollBehavior = 'none'
-      body.style.position = 'fixed'
-      body.style.top = `-${savedScrollY}px`
-      body.style.left = '0'
-      body.style.right = '0'
-      body.style.width = '100%'
+      document.addEventListener('touchmove', preventBackgroundTouchMove, { passive: false })
     }
     return () => {
       if (--scrollLocks === 0) {
@@ -95,12 +103,7 @@ export function useScrollLock(active: boolean) {
         root.style.overscrollBehavior = ''
         body.style.overflow = ''
         body.style.overscrollBehavior = ''
-        body.style.position = ''
-        body.style.top = ''
-        body.style.left = ''
-        body.style.right = ''
-        body.style.width = ''
-        window.scrollTo(0, savedScrollY)
+        document.removeEventListener('touchmove', preventBackgroundTouchMove)
       }
     }
   }, [active])

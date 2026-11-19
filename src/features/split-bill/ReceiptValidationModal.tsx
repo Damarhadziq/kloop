@@ -82,7 +82,7 @@ export function ReceiptValidationModal({
         aria-labelledby="validation-modal-title"
         aria-describedby="validation-modal-desc"
         onClick={(e) => e.stopPropagation()}
-        className={`relative flex max-h-[calc(100dvh-32px)] w-full max-w-[390px] flex-col gap-[16px] overflow-y-auto rounded-[24px] border border-[#ececec] bg-white p-[20px] text-[#054131] shadow-[0_20px_48px_rgba(5,65,49,0.24)] ${
+        className={`relative flex max-h-[calc(100dvh-32px)] w-full max-w-[390px] flex-col gap-[16px] overflow-y-auto rounded-[24px] border border-[#ececec] bg-white p-[20px] text-[#054131] ${
           closing ? '[animation:modal-out_200ms_ease-in_forwards]' : '[animation:modal-in_280ms_cubic-bezier(0.2,0.8,0.2,1)]'
         }`}
       >

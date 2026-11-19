@@ -170,7 +170,7 @@ export function HeroCollage() {
         className={`${card} top-[-46.02px] left-[130.7px] h-[212.577px] w-[417.209px] [animation:card-in_700ms_cubic-bezier(0.2,0.8,0.2,1)_240ms_both]`}
       >
         <div className="flex-none rotate-[11.18deg]">
-          <div className="relative h-[138px] w-[398px] rounded-[12px] shadow-[0px_6px_24px_0px_rgba(0,0,0,0.12)]">
+          <div className="relative h-[138px] w-[398px] rounded-[12px]">
             <HeroTalanganPreview mode="masuk" />
           </div>
         </div>

@@ -58,9 +58,9 @@ export function OtpVerificationScreen({
               return (
                 <div
                   key={i}
-                  className={`relative flex aspect-square min-w-px flex-1 items-center justify-center overflow-clip rounded-[10px] bg-[#fefef8] transition-[border-color,box-shadow] duration-200 ${
+                  className={`relative flex aspect-square min-w-px flex-1 items-center justify-center overflow-clip rounded-[10px] bg-[#fefef8] transition-colors duration-200 ${
                     isActive
-                      ? 'border-[1.5px] border-[#a6bb18] shadow-[0_0_0_3px_rgba(166,187,24,0.12)]'
+                      ? 'border-[1.5px] border-[#a6bb18]'
                       : error && !digit
                         ? 'border border-[#e5484d]'
                         : 'border border-[#ececec]'

@@ -271,7 +271,7 @@ export function AllBillsScreen({
         ) : (
           <div className="stagger flex flex-col gap-[16px]">
             {/* Search Bar with Hugeicons Search Icon */}
-            <div className="flex w-full items-center gap-[10px] rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] transition-[border-color,box-shadow] duration-200 focus-within:border-[#a6bb18] focus-within:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]">
+            <div className="flex w-full items-center gap-[10px] rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[12px] py-[10px] transition-colors duration-200 focus-within:border-[#a6bb18]">
               <span className="shrink-0 text-[#8e8e8e]">{HUGEICONS.search}</span>
               <input
                 type="search"
@@ -310,7 +310,7 @@ export function AllBillsScreen({
                     onClick={() => setActiveFilter(chip.key)}
                     className={`flex shrink-0 items-center gap-[6px] rounded-full border px-[12px] py-[7px] font-['Outfit:Medium'] text-[13px] font-medium transition duration-200 active:scale-95 ${
                       active
-                        ? 'border-[#a6bb18] bg-[#a6bb18] text-white shadow-[0_4px_12px_rgba(166,187,24,0.24)]'
+                        ? 'border-[#a6bb18] bg-[#a6bb18] text-white'
                         : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18] hover:bg-[#fefef8]'
                     }`}
                   >

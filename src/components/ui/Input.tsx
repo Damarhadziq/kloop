@@ -29,7 +29,7 @@ export function Field({ label, error, password, ...input }: FieldProps) {
     <label className="flex w-full flex-col gap-[10px]">
       <span className="font-['Outfit:Regular'] text-[16px] leading-[normal] font-normal tracking-[-0.2px] text-[#054131]">{label}</span>
       <span
-        className={`flex w-full items-center gap-[8px] rounded-[12px] border bg-[#fefef8] px-[10px] transition-[border-color,box-shadow] duration-200 focus-within:border-[#a6bb18] focus-within:shadow-[0_0_0_3px_rgba(166,187,24,0.14)] ${
+        className={`flex w-full items-center gap-[8px] rounded-[12px] border bg-[#fefef8] px-[10px] transition-colors duration-200 focus-within:border-[#a6bb18] ${
           error ? 'border-[#e5484d] [animation:shake_360ms_ease-in-out]' : 'border-[#ececec]'
         }`}
       >
@@ -67,7 +67,7 @@ export function Input({
   if (!label) {
     return (
       <input
-        className={`rounded-[8px] border border-[#ececec] px-[12px] py-[10px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)] ${className}`}
+        className={`rounded-[8px] border border-[#ececec] px-[12px] py-[10px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none transition-colors duration-200 focus:border-[#a6bb18] ${className}`}
         {...props}
       />
     )
@@ -77,7 +77,7 @@ export function Input({
     <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
       {label}
       <input
-        className={`rounded-[8px] border border-[#ececec] px-[12px] py-[10px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)] ${className}`}
+        className={`rounded-[8px] border border-[#ececec] px-[12px] py-[10px] font-['Outfit:Regular'] text-[14px] text-[#054131] outline-none transition-colors duration-200 focus:border-[#a6bb18] ${className}`}
         {...props}
       />
     </label>

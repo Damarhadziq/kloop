@@ -46,7 +46,7 @@ export function ProfileMenu({
       {mounted && (
         <div
           role="menu"
-          className={`absolute top-[48px] left-0 w-[220px] origin-top-left rounded-[12px] border border-[#ececec] bg-white p-[6px] shadow-[0_12px_32px_rgba(5,65,49,0.12)] ${
+          className={`absolute top-[48px] left-0 w-[220px] origin-top-left rounded-[12px] border border-[#ececec] bg-white p-[6px] ${
             closing ? '[animation:menu-out_180ms_ease-in_forwards]' : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
           }`}
         >

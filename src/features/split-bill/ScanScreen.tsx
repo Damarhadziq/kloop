@@ -436,7 +436,7 @@ export function ScanScreen({
                   width: `${liveBounds.widthPct}%`,
                   height: `${liveBounds.heightPct}%`,
                 }}
-                className={`pointer-events-none absolute rounded-[14px] border-[2px] shadow-[0_0_0_9999px_rgba(5,65,49,0.22)] transition-all duration-300 ease-out ${
+                className={`pointer-events-none absolute rounded-[14px] border-[2px] transition-all duration-300 ease-out ${
                   liveBounds.detected ? 'border-[#a6bb18]' : 'border-white/75'
                 }`}
               >

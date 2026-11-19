@@ -28,7 +28,7 @@ export function ActiveBillCard({
         }
       }}
       className={`flex w-full flex-col gap-[12px] rounded-[12px] border border-[#ececec] bg-white p-[12px] transition duration-200 [animation:fade-up_360ms_cubic-bezier(0.2,0.8,0.2,1)_both] ${
-        onOpenDetail ? 'cursor-pointer hover:border-[#a6bb18] hover:shadow-[0_6px_20px_rgba(5,65,49,0.06)] active:scale-[0.99]' : ''
+        onOpenDetail ? 'cursor-pointer hover:border-[#a6bb18] active:scale-[0.99]' : ''
       }`}
     >
       <div className="flex items-center justify-between">

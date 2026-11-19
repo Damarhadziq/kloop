@@ -46,7 +46,8 @@ export function PullToRefresh({
   useEffect(() => {
     if (disabled) return
 
-    const canStartPull = () => window.scrollY <= 1 && !refreshingRef.current && document.body.style.position !== 'fixed'
+    const canStartPull = () =>
+      window.scrollY <= 1 && !refreshingRef.current && document.body.style.overflow !== 'hidden'
 
     const handleStart = (clientY: number) => {
       if (!canStartPull()) return

@@ -69,7 +69,7 @@ export function ManualInputSheet({
                 required
                 autoFocus
                 placeholder="cth. Kopi Nako Tembalang"
-                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none transition-colors duration-200 focus:border-[#a6bb18]"
               />
             </label>
             <label className="flex flex-col gap-[6px] font-['Outfit:Regular'] text-[12px] text-[#8e8e8e]">
@@ -79,7 +79,7 @@ export function ManualInputSheet({
                 required
                 inputMode="numeric"
                 placeholder="185000"
-                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none transition-[border-color,box-shadow] duration-200 focus:border-[#a6bb18] focus:shadow-[0_0_0_3px_rgba(166,187,24,0.14)]"
+                className="rounded-[8px] border border-[#ececec] px-[12px] py-[10px] text-[14px] text-[#054131] outline-none transition-colors duration-200 focus:border-[#a6bb18]"
               />
             </label>
             <div className="flex gap-[10px] pt-[4px]">

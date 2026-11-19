@@ -57,7 +57,7 @@ export function ConfirmModal({
         aria-labelledby="confirm-modal-title"
         aria-describedby="confirm-modal-desc"
         onClick={(e) => e.stopPropagation()}
-        className={`relative flex w-full max-w-[366px] flex-col gap-[20px] overflow-hidden rounded-[24px] border border-[#ececec] bg-white p-[20px] text-[#054131] shadow-[0_20px_48px_rgba(5,65,49,0.22)] ${
+        className={`relative flex w-full max-w-[366px] flex-col gap-[20px] overflow-hidden rounded-[24px] border border-[#ececec] bg-white p-[20px] text-[#054131] ${
           closing
             ? '[animation:modal-out_200ms_ease-in_forwards]'
             : '[animation:modal-in_260ms_cubic-bezier(0.2,0.8,0.2,1)]'

@@ -42,11 +42,36 @@
     min-height: 100dvh;
   }
   body {
-    font-family: 'Outfit:Regular', system-ui, sans-serif;
+    font-family: 'Outfit', 'Outfit:Regular', sans-serif;
     overscroll-behavior-y: contain;
     background: #f7f8f3;
     color: #054131;
     min-height: 100dvh;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font-family: 'Outfit', 'Outfit:Regular', sans-serif;
+  }
+  /* Tactile click/press feedback for every interactive & actionable element */
+  button:not(:disabled),
+  a[href],
+  [role='button']:not([aria-disabled='true']),
+  [role='tab']:not([aria-disabled='true']),
+  [role='menuitem']:not([aria-disabled='true']) {
+    cursor: pointer;
+    transition-property: scale, opacity, background-color, border-color, color;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  button:not(:disabled):active,
+  a[href]:active,
+  [role='button']:not([aria-disabled='true']):active,
+  [role='tab']:not([aria-disabled='true']):active,
+  [role='menuitem']:not([aria-disabled='true']):active {
+    scale: 0.965;
+    opacity: 0.88;
   }
   #root {
     min-height: 100dvh;
@@ -55,7 +80,7 @@
     margin-inline: auto;
     background: #ffffff;
     position: relative;
-    box-shadow: 0 0 40px rgba(5, 65, 49, 0.06);
+    border-inline: 1px solid #ececec;
   }
   @media (max-width: 430px) {
     html,
@@ -63,7 +88,7 @@
       background: #ffffff;
     }
     #root {
-      box-shadow: none;
+      border-inline: none;
     }
   }
 
