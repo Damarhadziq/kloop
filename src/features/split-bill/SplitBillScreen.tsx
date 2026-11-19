@@ -8,7 +8,16 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { ScanResultSkeleton, useSimulatedLoading } from '@/components/skeletons'
-import { ConfirmModal, Icon, Img, KLOOP_LOGO, PrimaryButton, usePresence, useScrollBarOnScroll } from '@/components/ui'
+import {
+  ConfirmModal,
+  Icon,
+  Img,
+  MODAL_BG_PATTERN,
+  MODAL_DELETE_ICON,
+  PrimaryButton,
+  usePresence,
+  useScrollBarOnScroll,
+} from '@/components/ui'
 import {
   CIRCLE_AVATARS,
   HOME_IMAGES,
@@ -41,7 +50,13 @@ export function SplitBillScreen({
   notify: (msg: string) => void
 }) {
   const splitScreenAssets = useMemo(
-    () => [...Object.values(CIRCLE_AVATARS), ...Object.values(SCAN_ICONS), HOME_IMAGES.dashedLine, KLOOP_LOGO],
+    () => [
+      ...Object.values(CIRCLE_AVATARS),
+      ...Object.values(SCAN_ICONS),
+      HOME_IMAGES.dashedLine,
+      MODAL_BG_PATTERN,
+      MODAL_DELETE_ICON,
+    ],
     [],
   )
   const { isLoading } = useSimulatedLoading(true, 650, splitScreenAssets)
@@ -501,12 +516,12 @@ export function SplitBillScreen({
 
   return (
     <div className="relative h-dvh max-h-dvh w-full overflow-hidden bg-white text-[#054131]">
-      {/* Faded Kloop Logo Watermark in Center Background */}
+      {/* Kloop Repeating Pattern Background (BG-PEMBAGIAN-MENU.svg) */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-y-0 left-1/2 z-0 flex w-full max-w-[430px] -translate-x-1/2 items-center justify-center select-none"
+        className="pointer-events-none fixed inset-y-0 left-1/2 z-0 w-full max-w-[430px] -translate-x-1/2 overflow-hidden select-none"
       >
-        <img src={KLOOP_LOGO} alt="" className="w-[230px] max-w-[58%] opacity-[0.06]" />
+        <img src={MODAL_BG_PATTERN} alt="" className="size-full object-cover" />
       </div>
 
       {/* Fixed Header constrained to 430px mobile shell */}

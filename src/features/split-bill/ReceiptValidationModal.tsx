@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { usePresence, useScrollLock } from '@/components/ui'
+import { MODAL_BG_PATTERN, MODAL_DELETE_ICON, usePresence, useScrollLock } from '@/components/ui'
 import type { ReceiptQualityMetrics, ReceiptValidationIssue } from '@/types'
 
 function MetricBar({
@@ -82,28 +82,26 @@ export function ReceiptValidationModal({
         aria-labelledby="validation-modal-title"
         aria-describedby="validation-modal-desc"
         onClick={(e) => e.stopPropagation()}
-        className={`flex max-h-[calc(100dvh-32px)] w-full max-w-[420px] flex-col gap-[16px] overflow-y-auto rounded-[20px] border border-[#ececec] bg-white p-[20px] text-[#054131] shadow-[0_20px_48px_rgba(5,65,49,0.24)] ${
+        className={`relative flex max-h-[calc(100dvh-32px)] w-full max-w-[390px] flex-col gap-[16px] overflow-y-auto rounded-[24px] border border-[#ececec] bg-white p-[20px] text-[#054131] shadow-[0_20px_48px_rgba(5,65,49,0.24)] ${
           closing ? '[animation:modal-out_200ms_ease-in_forwards]' : '[animation:modal-in_280ms_cubic-bezier(0.2,0.8,0.2,1)]'
         }`}
       >
+        <img
+          src={MODAL_BG_PATTERN}
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute inset-0 size-full object-cover select-none"
+        />
+
         {/* Top Status Header */}
-        <div className="flex items-start justify-between gap-[12px]">
-          <div className="flex items-center gap-[10px]">
-            <div
-              className={`flex size-[42px] shrink-0 items-center justify-center rounded-[12px] ${
-                isError ? 'bg-[#e5484d]/12 text-[#e5484d]' : 'bg-[#f59e0b]/15 text-[#d97706]'
-              }`}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path
-                  d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
+        <div className="relative z-10 flex items-start justify-between gap-[12px]">
+          <div className="flex items-center gap-[12px]">
+            <img
+              src={MODAL_DELETE_ICON}
+              alt=""
+              aria-hidden
+              className="size-[42px] shrink-0 rounded-full"
+            />
             <div className="flex min-w-0 flex-col gap-[2px]">
               <span
                 className={`inline-flex w-fit items-center rounded-[6px] px-[8px] py-[2px] font-['Outfit:Medium'] text-[11px] font-medium ${
