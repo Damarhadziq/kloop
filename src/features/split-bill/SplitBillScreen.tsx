@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { ScanResultSkeleton, useSimulatedLoading } from '@/components/skeletons'
 import {
@@ -89,11 +88,6 @@ export function SplitBillScreen({
   const [menuListOpen, setMenuListOpen] = useState(false)
   const { mounted: menuListMounted, closing: menuListClosing } = usePresence(menuListOpen, 180)
 
-  // Hold-and-drag state for the right-side vertical ellipse rail (strictly visible ONLY while held, never on simple tap)
-  const [isHoldingRail, setIsHoldingRail] = useState(false)
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const railRef = useRef<HTMLDivElement>(null)
-
   const menuPopoverRef = useRef<HTMLDivElement>(null)
   const pageScrollRef = useRef<HTMLDivElement>(null)
   const pageRefs = useRef<(HTMLElement | null)[]>([])
@@ -158,29 +152,6 @@ export function SplitBillScreen({
     }
   }, [menuListOpen])
 
-  // Guarantee floating pills hide immediately whenever finger/pointer is released anywhere on screen
-  useEffect(() => {
-    const endHold = () => {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current)
-        holdTimerRef.current = null
-      }
-      setIsHoldingRail(false)
-    }
-    window.addEventListener('pointerup', endHold)
-    window.addEventListener('pointercancel', endHold)
-    window.addEventListener('touchend', endHold)
-    window.addEventListener('touchcancel', endHold)
-    window.addEventListener('blur', endHold)
-    return () => {
-      window.removeEventListener('pointerup', endHold)
-      window.removeEventListener('pointercancel', endHold)
-      window.removeEventListener('touchend', endHold)
-      window.removeEventListener('touchcancel', endHold)
-      window.removeEventListener('blur', endHold)
-    }
-  }, [])
-
   const pageMetaList = useMemo(() => {
     const list: { index: number; shortTitle: string }[] = [
       {
@@ -211,19 +182,18 @@ export function SplitBillScreen({
       setActivePageIdx(clamped)
       const target = pageRefs.current[clamped]
       if (target) {
-        target.scrollIntoView({ behavior, block: 'center' })
+        target.scrollIntoView({ behavior, block: 'start' })
       }
     },
     [totalPages],
   )
 
-  // Detect which stacked card is closest to the vertical center of the scroll viewport
+  // Detect which stacked card is closest to the upper-middle focal point of the scroll viewport
   const handleViewportScroll = () => {
-    if (isHoldingRail) return
     const container = pageScrollRef.current
     if (!container) return
     const containerRect = container.getBoundingClientRect()
-    const centerY = containerRect.top + containerRect.height / 2
+    const focalY = containerRect.top + containerRect.height * 0.34
 
     let bestIdx = activePageIdx
     let minDistance = Infinity
@@ -232,7 +202,7 @@ export function SplitBillScreen({
       if (!el) continue
       const rect = el.getBoundingClientRect()
       const cardCenterY = rect.top + rect.height / 2
-      const dist = Math.abs(cardCenterY - centerY)
+      const dist = Math.abs(cardCenterY - focalY)
       if (dist < minDistance) {
         minDistance = dist
         bestIdx = i
@@ -241,59 +211,6 @@ export function SplitBillScreen({
     if (bestIdx !== activePageIdx) {
       setActivePageIdx(bestIdx)
     }
-  }
-
-  // Maps the finger's Y position continuously along the rail to the exact page index [0 .. totalPages - 1]
-  const resolveRailIndexAtClientY = useCallback(
-    (clientY: number): number => {
-      const rail = railRef.current
-      if (!rail || totalPages <= 1) return 0
-      const rect = rail.getBoundingClientRect()
-      const pad = 16
-      const usableTop = rect.top + pad
-      const usableHeight = Math.max(1, rect.height - pad * 2)
-      const ratio = Math.max(0, Math.min(1, (clientY - usableTop) / usableHeight))
-      return Math.round(ratio * (totalPages - 1))
-    },
-    [totalPages],
-  )
-
-  // Hold-only trigger on right-side ellipse rail (tapping does NOT switch cards)
-  const handleRailPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      /* ignore */
-    }
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
-    // Require a genuine hold (200ms) before activating floating scrub mode; a quick tap does nothing
-    holdTimerRef.current = setTimeout(() => {
-      setIsHoldingRail(true)
-    }, 200)
-  }
-
-  const handleRailPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!isHoldingRail) return
-    const targetIdx = resolveRailIndexAtClientY(e.clientY)
-    if (targetIdx !== activePageIdx) {
-      scrollToPage(targetIdx, 'smooth')
-    }
-  }
-
-  const handleRailPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current)
-      holdTimerRef.current = null
-    }
-    try {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId)
-      }
-    } catch {
-      /* ignore */
-    }
-    setIsHoldingRail(false)
   }
 
   const toggleFriendInBill = (friend: CircleName) => {
@@ -498,11 +415,10 @@ export function SplitBillScreen({
   // Inactive cards are purely display-only (disabled, non-clickable, scaled down slightly)
   const getCardStackClass = (cardIdx: number) => {
     const isActive = activePageIdx === cardIdx
-    return `relative w-full max-w-[366px] rounded-[20px] border bg-white p-[18px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-      isActive
-        ? 'z-20 scale-100 opacity-100 border-[#ececec] shadow-[0_14px_34px_rgba(5,65,49,0.08)]'
-        : 'z-0 pointer-events-none select-none scale-[0.91] opacity-55 border-[#ececec]/80 shadow-none'
-    }`
+    return `relative w-full max-w-[398px] rounded-[20px] border bg-white p-[18px] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isActive
+      ? 'z-20 scale-100 opacity-100 border-[#ececec] shadow-[0_14px_34px_rgba(5,65,49,0.08)]'
+      : 'z-0 pointer-events-none select-none scale-[0.91] opacity-55 border-[#ececec]/80 shadow-none'
+      }`
   }
 
   if (isLoading) {
@@ -517,46 +433,32 @@ export function SplitBillScreen({
 
   return (
     <div className="relative h-dvh max-h-dvh w-full overflow-hidden bg-white text-[#054131]">
-      {/* Kloop Repeating Pattern Background (BG-PEMBAGIAN-MENU.svg) */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-y-0 left-1/2 z-0 w-full max-w-[430px] -translate-x-1/2 overflow-hidden select-none"
-      >
-        <img src={MODAL_BG_PATTERN} alt="" className="size-full object-cover" />
-      </div>
-
       {/* Fixed Header constrained to 430px mobile shell */}
       <header className="fixed top-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2 bg-white px-[16px] pt-[20px] pb-[12px]">
         <div className="flex w-full items-center justify-between gap-[10px]">
           <ScanRoundButton label="Kembali" icon={SCAN_ICONS.back} onClick={requestCancelBack} />
 
-          <h1 className="font-['Outfit:Medium'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
+          <h1 className="font-['Outfit'] text-[18px] leading-[normal] font-medium tracking-[-0.2px] text-[#054131]">
             Atur Pembagian
           </h1>
 
-          {/* Top-Right Icon-Only Button with Circular Menu Count Badge */}
+          {/* Top-Right Menu Navigation Button with Custom SVG Icon & Square Count Badge */}
           <div ref={menuPopoverRef} className="relative shrink-0">
             <button
               type="button"
               aria-label="Daftar menu pesanan"
               aria-expanded={menuListOpen}
               onClick={() => setMenuListOpen((o) => !o)}
-              className={`relative flex size-[40px] items-center justify-center rounded-full transition active:scale-95 ${
-                menuListOpen
-                  ? 'bg-[#a6bb18]/25 ring-2 ring-[#a6bb18]'
-                  : 'bg-[#f8f8ec] hover:bg-[#eef0d6]'
-              }`}
+              className={`relative flex size-[40px] items-center justify-center rounded-full transition-all duration-150 hover:brightness-[0.97] active:scale-[0.92] ${menuListOpen ? 'ring-2 ring-[#a6bb18]' : ''
+                }`}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden className="text-[#054131]">
-                <path
-                  d="M9 6H20M9 12H20M9 18H20M4.5 6H4.51M4.5 12H4.51M4.5 18H4.51"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span className="absolute -top-[3px] -right-[3px] flex size-[19px] items-center justify-center rounded-full bg-[#a6bb18] font-['Outfit:SemiBold'] text-[11px] font-semibold text-white ring-2 ring-white tabular-nums">
+              <Img
+                src={SCAN_ICONS.menuAturPembagian}
+                alt=""
+                className="size-[40px] rounded-full object-contain"
+                skeleton="rounded-full"
+              />
+              <span className="absolute -top-[3px] -right-[3px] flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] bg-[#a6bb18] px-[4px] font-['Outfit'] text-[11px] leading-none font-semibold text-white ring-2 ring-white tabular-nums">
                 {items.length}
               </span>
             </button>
@@ -565,17 +467,21 @@ export function SplitBillScreen({
               <div
                 role="dialog"
                 aria-label="Daftar menu"
-                className={`absolute top-[48px] right-0 z-50 flex w-[268px] origin-top-right flex-col gap-[8px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${
-                  menuListClosing
-                    ? '[animation:menu-out_180ms_ease-in_forwards]'
-                    : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
-                }`}
+                className={`absolute top-[48px] right-0 z-50 flex w-[276px] origin-top-right flex-col gap-[10px] rounded-[16px] border border-[#ececec] bg-white p-[12px] shadow-[0_16px_38px_rgba(5,65,49,0.16)] ${menuListClosing
+                  ? '[animation:menu-out_180ms_ease-in_forwards]'
+                  : '[animation:menu-in_220ms_cubic-bezier(0.2,0.8,0.2,1)]'
+                  }`}
               >
-                <div className="flex items-center justify-between border-b border-[#ececec] pb-[8px]">
-                  <span className="font-['Outfit:Medium'] text-[14px] font-medium text-[#054131]">
-                    Daftar Menu ({items.length})
-                  </span>
-                  <span className="font-['Outfit:SemiBold'] text-[13px] font-semibold tabular-nums text-[#a6bb18]">
+                <div className="flex items-center justify-between gap-[8px] px-[2px]">
+                  <div className="flex items-center gap-[6px]">
+                    <span className="font-['Outfit'] text-[14px] font-medium text-[#054131]">
+                      Daftar Menu
+                    </span>
+                    <span className="flex size-[18px] items-center justify-center rounded-[4px] bg-[#f2f3e6] text-center font-['Outfit'] text-[12px] font-medium tabular-nums text-[#a6bb18]">
+                      {items.length}
+                    </span>
+                  </div>
+                  <span className="font-['Outfit'] text-[13px] font-semibold tabular-nums text-[#a6bb18]">
                     {formatRupiah(grandTotal)}
                   </span>
                 </div>
@@ -584,6 +490,7 @@ export function SplitBillScreen({
                   {items.map((it, idx) => {
                     const pageNumber = idx + 1
                     const isCurrent = activePageIdx === pageNumber && splitMethod === 'per_item'
+                    const assignees = it.assignedParticipantIds.filter((id): id is CircleName => id in CIRCLE_AVATARS)
                     return (
                       <button
                         key={it.id}
@@ -593,21 +500,42 @@ export function SplitBillScreen({
                           setTimeout(() => scrollToPage(pageNumber), 40)
                           setMenuListOpen(false)
                         }}
-                        className={`flex w-full items-center justify-between gap-[8px] rounded-[10px] border px-[10px] py-[8px] text-left transition ${
-                          isCurrent
-                            ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131]'
-                            : 'border-[#ececec] bg-[#fefef8] text-[#054131] hover:border-[#a6bb18]'
-                        }`}
+                        className={`flex w-full items-center justify-between gap-[8px] rounded-[10px] border px-[10px] py-[8px] text-left transition active:scale-[0.98] ${isCurrent
+                          ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#054131]'
+                          : 'border-[#ececec] bg-[#fefef8] text-[#054131] hover:border-[#a6bb18]'
+                          }`}
                       >
-                        <div className="flex min-w-0 flex-1 flex-col gap-[2px]">
-                          <p className="truncate font-['Outfit:Medium'] text-[13px] font-medium">
-                            {idx + 1}. {it.name || 'Menu'}
+                        <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+                          <p className="truncate font-['Outfit'] text-[13px] leading-[normal] font-medium text-[#054131]">
+                            <span className="font-semibold text-[#a6bb18] tabular-nums">{it.qty}x</span>{' '}
+                            {it.name || 'Menu'}
                           </p>
-                          <p className="font-['Outfit:Regular'] text-[11px] text-[#8e8e8e]">
-                            {it.qty}x • {it.assignedParticipantIds.length} teman
-                          </p>
+                          {assignees.length > 0 ? (
+                            <div className="flex items-center">
+                              {assignees.slice(0, 5).map((friendName, i, arr) => (
+                                <span
+                                  key={friendName}
+                                  className={`relative block size-[18px] shrink-0 ${i < arr.length - 1 ? 'mr-[-7px]' : ''}`}
+                                >
+                                  <Img
+                                    src={CIRCLE_AVATARS[friendName]}
+                                    alt={friendName}
+                                    skeleton="rounded-full ring-1 ring-white"
+                                    className="size-full rounded-full object-cover ring-1 ring-white"
+                                  />
+                                </span>
+                              ))}
+                              {assignees.length > 5 && (
+                                <span className="ml-[5px] flex h-[18px] min-w-[18px] items-center justify-center rounded-[4px] bg-[#f2f3e6] px-[4px] font-['Outfit'] text-[10px] font-medium tabular-nums text-[#a6bb18]">
+                                  +{assignees.length - 5}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="font-['Outfit'] text-[11px] text-[#8e8e8e]">Belum dibagi</span>
+                          )}
                         </div>
-                        <span className="shrink-0 font-['Outfit:SemiBold'] text-[12px] font-semibold tabular-nums text-[#a6bb18]">
+                        <span className="shrink-0 font-['Outfit'] text-[12px] font-semibold tabular-nums text-[#a6bb18]">
                           {formatRupiah(it.price)}
                         </span>
                       </button>
@@ -621,7 +549,7 @@ export function SplitBillScreen({
                     scrollToPage(totalPages - 1)
                     setMenuListOpen(false)
                   }}
-                  className="mt-[2px] flex w-full items-center justify-center rounded-[10px] bg-[#f2f3e6] py-[9px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
+                  className="mt-[2px] flex w-full items-center justify-center rounded-[10px] bg-[#f2f3e6] py-[9px] font-['Outfit'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
                 >
                   Ringkasan & Pajak
                 </button>
@@ -631,74 +559,21 @@ export function SplitBillScreen({
         </div>
       </header>
 
-      {/* Right-Side Hold-to-Scrub Vertical Ellipse Rail anchored inside 430px mobile shell */}
-      <div className="pointer-events-none fixed inset-y-0 left-1/2 z-40 w-full max-w-[430px] -translate-x-1/2">
-        <div
-          ref={railRef}
-          onPointerDown={handleRailPointerDown}
-          onPointerMove={handleRailPointerMove}
-          onPointerUp={handleRailPointerEnd}
-          onPointerCancel={handleRailPointerEnd}
-          onLostPointerCapture={() => setIsHoldingRail(false)}
-          className="pointer-events-auto absolute top-1/2 right-[8px] flex -translate-y-1/2 touch-none select-none flex-col items-end gap-[14px] py-[22px] pl-[20px] pr-[6px]"
-        >
-        {pageMetaList.map((meta) => {
-          const isActive = activePageIdx === meta.index
-          const distance = Math.abs(activePageIdx - meta.index)
-
-          const waveTransform = isActive
-            ? '-translate-x-[16px] scale-[1.06]'
-            : distance === 1
-              ? '-translate-x-[6px] scale-[1.0]'
-              : 'translate-x-0 scale-[0.94] opacity-75'
-
-          return (
-            <div key={meta.index} className="relative flex h-[24px] items-center justify-end">
-              {/* Floating Pill appears ONLY while user is actively holding the rail */}
-              {isHoldingRail && (
-                <div
-                  style={{ animationDelay: `${meta.index * 20}ms` }}
-                  className={`pointer-events-none mr-[14px] flex max-w-[184px] items-center rounded-full border px-[12px] py-[5px] shadow-[0_8px_22px_rgba(5,65,49,0.14)] backdrop-blur-md transition-all duration-150 ease-out [animation:float-pill-in_180ms_cubic-bezier(0.34,1.56,0.64,1)_both] ${waveTransform} ${
-                    isActive
-                      ? 'border-[#a6bb18] bg-[#a6bb18] text-white'
-                      : 'border-[#ececec] bg-white/95 text-[#054131]'
-                  }`}
-                >
-                  <span className="truncate font-['Outfit'] text-[12px] font-medium">
-                    {meta.shortTitle}
-                  </span>
-                </div>
-              )}
-
-              {/* Right-Side Progress Ellipse */}
-              <span
-                className={`block rounded-full transition-all duration-200 ${
-                  isActive
-                    ? 'h-[24px] w-[7px] bg-[#a6bb18] shadow-[0_0_8px_rgba(166,187,24,0.45)]'
-                    : 'h-[7px] w-[7px] bg-[#dedede]'
-                }`}
-              />
-            </div>
-          )
-        })}
-        </div>
-      </div>
-
       {/* Main Stacked Carousel Viewport */}
-      <div className="relative h-full w-full pt-[68px]">
-        {/* Top White Gradient Blur Layer Mask (covers the upper part of the previous card so only a small edge peeks) */}
+      <div className="relative h-full w-full pt-[72px]">
+        {/* Top White Blur Layer (~10px extending below the fixed header) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-[68px] z-30 h-[118px] bg-gradient-to-b from-white from-30% via-white/90 via-65% to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-[72px] z-30 h-[12px] bg-gradient-to-b from-white via-white/85 to-transparent"
         />
 
-        {/* Bottom White Gradient Blur Layer Mask (covers the lower part of the next card so only a small edge peeks) */}
+        {/* Bottom White Blur Layer (32px height) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[118px] bg-gradient-to-t from-white from-30% via-white/90 via-65% to-transparent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[32px] bg-gradient-to-t from-white via-white/85 to-transparent"
         />
 
-        {/* Stacked Vertical Scroll Container (1 scroll = 1 card via snap-always & wheel step) */}
+        {/* Stacked Vertical Scroll Container (raised main card position + 1 scroll = 1 card) */}
         <div
           ref={pageScrollRef}
           onScroll={handleViewportScroll}
@@ -711,7 +586,7 @@ export function SplitBillScreen({
             const dir = e.deltaY > 0 ? 1 : -1
             scrollToPage(activePageIdx + dir, 'smooth')
           }}
-          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[38px] overflow-y-auto pl-[16px] pr-[38px] py-[16vh] scroll-smooth"
+          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[32px] overflow-y-auto px-[16px] pt-[24px] pb-[42vh] scroll-smooth"
         >
           {/* CARD 0: Nama Tempat, Metode Pembagian, & Teman Patungan */}
           <section
@@ -719,7 +594,7 @@ export function SplitBillScreen({
               pageRefs.current[0] = el
             }}
             aria-disabled={activePageIdx !== 0}
-            className="flex w-full shrink-0 snap-center snap-always justify-center"
+            className="flex w-full shrink-0 scroll-mt-[24px] snap-start snap-always justify-center"
           >
             <div
               inert={activePageIdx !== 0 ? true : undefined}
@@ -803,11 +678,10 @@ export function SplitBillScreen({
                             setEqualTotalInput(String(itemsSubtotal + taxAmount + serviceAmount - discountAmount))
                           }
                         }}
-                        className={`flex items-center justify-center gap-[7px] rounded-[10px] border py-[8px] px-[12px] font-['Outfit:Medium'] text-[13px] font-medium transition duration-200 active:scale-[0.98] ${
-                          active
-                            ? 'border-[#a6bb18] bg-[#a6bb18] text-white'
-                            : 'border-[#ececec] bg-[#fefef8] text-[#8e8e8e] hover:border-[#a6bb18] hover:text-[#054131]'
-                        }`}
+                        className={`flex items-center justify-center gap-[7px] rounded-[10px] border py-[8px] px-[12px] font-['Outfit:Medium'] text-[13px] font-medium transition duration-200 active:scale-[0.98] ${active
+                          ? 'border-[#a6bb18] bg-[#a6bb18] text-white'
+                          : 'border-[#ececec] bg-[#fefef8] text-[#8e8e8e] hover:border-[#a6bb18] hover:text-[#054131]'
+                          }`}
                       >
                         {tab.icon}
                         <span>{tab.label}</span>
@@ -846,17 +720,15 @@ export function SplitBillScreen({
                         type="button"
                         aria-pressed={active}
                         onClick={() => toggleFriendInBill(friend)}
-                        className={`flex max-w-[124px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-200 active:scale-95 ${
-                          active
-                            ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#a6bb18] ring-1 ring-[#a6bb18]'
-                            : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18]'
-                        }`}
+                        className={`flex max-w-[124px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-200 active:scale-95 ${active
+                          ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#a6bb18] ring-1 ring-[#a6bb18]'
+                          : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18]'
+                          }`}
                       >
                         <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
                         <span
-                          className={`truncate font-['Outfit'] text-[13px] ${
-                            active ? 'font-medium text-[#a6bb18]' : 'font-normal text-[#054131]'
-                          }`}
+                          className={`truncate font-['Outfit'] text-[13px] ${active ? 'font-medium text-[#a6bb18]' : 'font-normal text-[#054131]'
+                            }`}
                         >
                           {friend}
                         </span>
@@ -880,7 +752,7 @@ export function SplitBillScreen({
                     pageRefs.current[pageIndex] = el
                   }}
                   aria-disabled={!isCardActive}
-                  className="flex w-full shrink-0 snap-center snap-always justify-center"
+                  className="flex w-full shrink-0 scroll-mt-[24px] snap-start snap-always justify-center"
                 >
                   <div inert={!isCardActive ? true : undefined} className={`flex flex-col gap-[18px] ${getCardStackClass(pageIndex)}`}>
                     {/* Menu Index without background frame + Icon-only Delete button */}
@@ -1001,17 +873,15 @@ export function SplitBillScreen({
                               type="button"
                               aria-pressed={assigned}
                               onClick={() => toggleFriendOnItem(item.id, friend)}
-                              className={`flex max-w-[124px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-150 active:scale-95 ${
-                                assigned
-                                  ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#a6bb18] ring-1 ring-[#a6bb18]'
-                                  : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18]'
-                              }`}
+                              className={`flex max-w-[124px] items-center gap-[5px] rounded-[999px] border px-[9px] py-[5px] transition duration-150 active:scale-95 ${assigned
+                                ? 'border-[#a6bb18] bg-[#f2f3e6] text-[#a6bb18] ring-1 ring-[#a6bb18]'
+                                : 'border-[#ececec] bg-white text-[#054131] hover:border-[#a6bb18]'
+                                }`}
                             >
                               <Icon src={CIRCLE_AVATARS[friend]} size={18} round />
                               <span
-                                className={`truncate font-['Outfit'] text-[13px] ${
-                                  assigned ? 'font-medium text-[#a6bb18]' : 'font-normal text-[#054131]'
-                                }`}
+                                className={`truncate font-['Outfit'] text-[13px] ${assigned ? 'font-medium text-[#a6bb18]' : 'font-normal text-[#054131]'
+                                  }`}
                               >
                                 {friend}
                               </span>
@@ -1031,7 +901,7 @@ export function SplitBillScreen({
               pageRefs.current[totalPages - 1] = el
             }}
             aria-disabled={activePageIdx !== totalPages - 1}
-            className="flex w-full shrink-0 snap-center snap-always justify-center"
+            className="flex w-full shrink-0 scroll-mt-[24px] snap-start snap-always justify-center"
           >
             <div inert={activePageIdx !== totalPages - 1 ? true : undefined} className={`flex flex-col gap-[18px] ${getCardStackClass(totalPages - 1)}`}>
               {splitMethod === 'per_item' ? (

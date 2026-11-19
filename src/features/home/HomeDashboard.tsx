@@ -417,9 +417,12 @@ export function HomeDashboard({
                       <button
                         type="button"
                         onClick={() => setScreen('all-bills')}
-                        className="text-[14px] text-[#a6bb18] hover:underline"
+                        className="flex items-center gap-[6px] text-[14px] text-[#a6bb18] hover:underline"
                       >
-                        {`Lihat Semua (${bills.length})`}
+                        <span>Lihat Semua</span>
+                        <span className="flex size-[18px] items-center justify-center rounded-[4px] bg-[#f2f3e6] text-center font-['Outfit'] text-[12px] font-medium tabular-nums text-[#a6bb18]">
+                          {bills.length}
+                        </span>
                       </button>
                     </div>
 

@@ -61,6 +61,7 @@ export const SCAN_ICONS = {
   back: a('5ceb4.svg'),
   flashlight: a('72e1b.svg'),
   gallery: a('140e3.svg'),
+  menuAturPembagian: a('icon-menu-aturpembagian.svg'),
 } as const
 
 export const SCAN_ASSETS = [...Object.values(SCAN_ICONS), ...JENIS_OPTIONS.map((j) => j.icon)]
