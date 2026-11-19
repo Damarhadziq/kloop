@@ -166,6 +166,10 @@ export function SplitBillScreen({
           shortTitle: it.name || `Menu ${idx + 1}`,
         })
       })
+      list.push({
+        index: items.length + 1,
+        shortTitle: 'Tambah Menu Baru',
+      })
     }
     list.push({
       index: list.length,
@@ -175,6 +179,7 @@ export function SplitBillScreen({
   }, [splitMethod, items])
 
   const totalPages = pageMetaList.length
+  const addMenuPageIdx = items.length + 1
 
   const scrollToPage = useCallback(
     (pageIdx: number, behavior: ScrollBehavior = 'smooth') => {
@@ -182,18 +187,18 @@ export function SplitBillScreen({
       setActivePageIdx(clamped)
       const target = pageRefs.current[clamped]
       if (target) {
-        target.scrollIntoView({ behavior, block: 'start' })
+        target.scrollIntoView({ behavior, block: 'center' })
       }
     },
     [totalPages],
   )
 
-  // Detect which stacked card is closest to the upper-middle focal point of the scroll viewport
+  // Detect which stacked card is closest to the vertical center of the scroll viewport
   const handleViewportScroll = () => {
     const container = pageScrollRef.current
     if (!container) return
     const containerRect = container.getBoundingClientRect()
-    const focalY = containerRect.top + containerRect.height * 0.34
+    const focalY = containerRect.top + containerRect.height / 2
 
     let bestIdx = activePageIdx
     let minDistance = Infinity
@@ -543,16 +548,30 @@ export function SplitBillScreen({
                   })}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    scrollToPage(totalPages - 1)
-                    setMenuListOpen(false)
-                  }}
-                  className="mt-[2px] flex w-full items-center justify-center rounded-[10px] bg-[#f2f3e6] py-[9px] font-['Outfit'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
-                >
-                  Ringkasan & Pajak
-                </button>
+                <div className="mt-[2px] flex items-center gap-[6px]">
+                  {splitMethod === 'per_item' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        scrollToPage(addMenuPageIdx)
+                        setMenuListOpen(false)
+                      }}
+                      className="flex flex-1 items-center justify-center rounded-[10px] border border-[#ececec] bg-[#fefef8] py-[9px] font-['Outfit'] text-[12px] font-medium text-[#054131] transition hover:border-[#a6bb18] active:scale-[0.98]"
+                    >
+                      + Tambah Menu
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      scrollToPage(totalPages - 1)
+                      setMenuListOpen(false)
+                    }}
+                    className="flex flex-1 items-center justify-center rounded-[10px] bg-[#f2f3e6] py-[9px] font-['Outfit'] text-[12px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
+                  >
+                    Ringkasan & Pajak
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -561,19 +580,19 @@ export function SplitBillScreen({
 
       {/* Main Stacked Carousel Viewport */}
       <div className="relative h-full w-full pt-[72px]">
-        {/* Top White Blur Layer (~10px extending below the fixed header) */}
+        {/* Top White Blur Layer (smooth soft gradient matching bottom) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-[72px] z-30 h-[12px] bg-gradient-to-b from-white via-white/85 to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-[72px] z-30 h-[40px] bg-gradient-to-b from-white via-white/80 to-transparent"
         />
 
-        {/* Bottom White Blur Layer (32px height) */}
+        {/* Bottom White Blur Layer (smooth soft gradient) */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[32px] bg-gradient-to-t from-white via-white/85 to-transparent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-[40px] bg-gradient-to-t from-white via-white/80 to-transparent"
         />
 
-        {/* Stacked Vertical Scroll Container (raised main card position + 1 scroll = 1 card) */}
+        {/* Stacked Vertical Scroll Container (centered active card so previous & next cards peek subtly) */}
         <div
           ref={pageScrollRef}
           onScroll={handleViewportScroll}
@@ -586,7 +605,7 @@ export function SplitBillScreen({
             const dir = e.deltaY > 0 ? 1 : -1
             scrollToPage(activePageIdx + dir, 'smooth')
           }}
-          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[32px] overflow-y-auto px-[16px] pt-[24px] pb-[42vh] scroll-smooth"
+          className="snap-page-scroll relative z-10 flex h-full w-full snap-y snap-mandatory flex-col items-center gap-[20px] overflow-y-auto px-[16px] py-[22vh] scroll-smooth"
         >
           {/* CARD 0: Nama Tempat, Metode Pembagian, & Teman Patungan */}
           <section
@@ -594,7 +613,7 @@ export function SplitBillScreen({
               pageRefs.current[0] = el
             }}
             aria-disabled={activePageIdx !== 0}
-            className="flex w-full shrink-0 scroll-mt-[24px] snap-start snap-always justify-center"
+            className="flex w-full shrink-0 snap-center snap-always justify-center"
           >
             <div
               inert={activePageIdx !== 0 ? true : undefined}
@@ -752,7 +771,7 @@ export function SplitBillScreen({
                     pageRefs.current[pageIndex] = el
                   }}
                   aria-disabled={!isCardActive}
-                  className="flex w-full shrink-0 scroll-mt-[24px] snap-start snap-always justify-center"
+                  className="flex w-full shrink-0 snap-center snap-always justify-center"
                 >
                   <div inert={!isCardActive ? true : undefined} className={`flex flex-col gap-[18px] ${getCardStackClass(pageIndex)}`}>
                     {/* Menu Index without background frame + Icon-only Delete button */}
@@ -895,77 +914,123 @@ export function SplitBillScreen({
               )
             })}
 
-          {/* FINAL CARD: Pajak, Tambah Menu Baru & Ringkasan Pembagian */}
+          {/* DEDICATED CARD: Tambah Menu Baru (Per Menu mode) */}
+          {splitMethod === 'per_item' && (
+            <section
+              ref={(el) => {
+                pageRefs.current[addMenuPageIdx] = el
+              }}
+              aria-disabled={activePageIdx !== addMenuPageIdx}
+              className="flex w-full shrink-0 snap-center snap-always justify-center"
+            >
+              <form
+                onSubmit={handleAddItem}
+                inert={activePageIdx !== addMenuPageIdx ? true : undefined}
+                className={`flex flex-col gap-[18px] ${getCardStackClass(addMenuPageIdx)}`}
+              >
+                <div className="flex items-center justify-between gap-[8px]">
+                  <span className="font-['Outfit'] text-[13px] font-medium text-[#a6bb18]">
+                    Tambah Menu Baru
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-[16px]">
+                  <label className="flex w-full flex-col gap-[8px]">
+                    <span className={labelTextClass}>Nama Menu</span>
+                    <input
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                      placeholder="Contoh: Es Kopi Susu"
+                      className={inputBoxClass}
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-12 gap-[10px]">
+                    <div className="col-span-5 flex flex-col gap-[8px]">
+                      <span className={labelTextClass}>Jumlah</span>
+                      <div className="flex h-[40px] items-center justify-between rounded-[12px] border border-[#ececec] bg-[#fefef8] px-[10px]">
+                        <button
+                          type="button"
+                          aria-label="Kurangi jumlah menu baru"
+                          onClick={() =>
+                            setNewItemQty((prev) => String(Math.max(1, (Number(prev.replace(/\D/g, '')) || 1) - 1)))
+                          }
+                          className="px-[5px] font-['Outfit'] text-[17px] font-semibold text-[#054131] hover:text-[#a6bb18]"
+                        >
+                          −
+                        </button>
+                        <span className="font-['Outfit'] text-[14px] font-medium tabular-nums text-[#054131]">
+                          {Math.max(1, Number(newItemQty.replace(/\D/g, '')) || 1)}x
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Tambah jumlah menu baru"
+                          onClick={() =>
+                            setNewItemQty((prev) => String((Number(prev.replace(/\D/g, '')) || 1) + 1))
+                          }
+                          className="px-[5px] font-['Outfit'] text-[17px] font-semibold text-[#054131] hover:text-[#a6bb18]"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <label className="col-span-7 flex flex-col gap-[8px]">
+                      <span className={labelTextClass}>Harga Satuan (Rp)</span>
+                      <input
+                        inputMode="numeric"
+                        value={newItemPrice}
+                        onChange={(e) => setNewItemPrice(e.target.value.replace(/\D/g, ''))}
+                        placeholder="0"
+                        className={`${inputBoxClass} text-right font-medium tabular-nums`}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="flex w-full items-center justify-center rounded-[12px] bg-[#f2f3e6] py-[11px] font-['Outfit'] text-[14px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2] active:scale-[0.98]"
+                >
+                  + Tambah Menu ke Daftar
+                </button>
+              </form>
+            </section>
+          )}
+
+          {/* FINAL CARD: Pajak, Service & Ringkasan Pembagian */}
           <section
             ref={(el) => {
               pageRefs.current[totalPages - 1] = el
             }}
             aria-disabled={activePageIdx !== totalPages - 1}
-            className="flex w-full shrink-0 scroll-mt-[24px] snap-start snap-always justify-center"
+            className="flex w-full shrink-0 snap-center snap-always justify-center"
           >
             <div inert={activePageIdx !== totalPages - 1 ? true : undefined} className={`flex flex-col gap-[18px] ${getCardStackClass(totalPages - 1)}`}>
               {splitMethod === 'per_item' ? (
-                <>
-                  {/* Form Tambah Menu Baru */}
-                  <form
-                    onSubmit={handleAddItem}
-                    className="flex flex-col gap-[8px] rounded-[12px] border border-dashed border-[#dedede] bg-[#fefef8] p-[10px]"
-                  >
-                    <span className={labelTextClass}>Tambah Menu Lainnya</span>
-                    <div className="grid grid-cols-12 gap-[6px]">
-                      <input
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        placeholder="Nama menu"
-                        className="col-span-6 rounded-[10px] border border-[#ececec] bg-white px-[10px] py-[10px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                      />
-                      <input
-                        value={newItemQty}
-                        onChange={(e) => setNewItemQty(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="Qty"
-                        className="col-span-2 rounded-[10px] border border-[#ececec] bg-white px-[6px] py-[10px] text-center font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                      />
-                      <input
-                        value={newItemPrice}
-                        onChange={(e) => setNewItemPrice(e.target.value)}
-                        inputMode="numeric"
-                        placeholder="Harga"
-                        className="col-span-4 rounded-[10px] border border-[#ececec] bg-white px-[10px] py-[10px] font-['Outfit:Regular'] text-[13px] text-[#054131] outline-none focus:border-[#a6bb18]"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="self-end rounded-[8px] bg-[#f2f3e6] px-[12px] py-[6px] font-['Outfit:Medium'] text-[13px] font-medium text-[#a6bb18] transition hover:bg-[#e8ead2]"
-                    >
-                      + Tambah Menu
-                    </button>
-                  </form>
-
-                  {/* Pajak & Service */}
-                  <div className="grid grid-cols-2 gap-[10px]">
-                    <label className="flex flex-col gap-[6px]">
-                      <span className={labelTextClass}>Pajak / PPN</span>
-                      <input
-                        inputMode="numeric"
-                        value={taxAmount || ''}
-                        placeholder="0"
-                        onChange={(e) => setTaxAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
-                        className={inputBoxClass}
-                      />
-                    </label>
-                    <label className="flex flex-col gap-[6px]">
-                      <span className={labelTextClass}>Service Charge</span>
-                      <input
-                        inputMode="numeric"
-                        value={serviceAmount || ''}
-                        placeholder="0"
-                        onChange={(e) => setServiceAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
-                        className={inputBoxClass}
-                      />
-                    </label>
-                  </div>
-                </>
+                /* Pajak & Service */
+                <div className="grid grid-cols-2 gap-[10px]">
+                  <label className="flex flex-col gap-[8px]">
+                    <span className={labelTextClass}>Pajak / PPN</span>
+                    <input
+                      inputMode="numeric"
+                      value={taxAmount || ''}
+                      placeholder="0"
+                      onChange={(e) => setTaxAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
+                      className={inputBoxClass}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-[8px]">
+                    <span className={labelTextClass}>Service Charge</span>
+                    <input
+                      inputMode="numeric"
+                      value={serviceAmount || ''}
+                      placeholder="0"
+                      onChange={(e) => setServiceAmount(Number(e.target.value.replace(/\D/g, '')) || 0)}
+                      className={inputBoxClass}
+                    />
+                  </label>
+                </div>
               ) : (
                 <label className="flex flex-col gap-[8px]">
                   <span className={labelTextClass}>Total Tagihan Bersama (Rp)</span>
